@@ -1,0 +1,61 @@
+package main
+
+import (
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"awesomeEval/config"
+	"awesomeEval/database"
+
+	"github.com/gin-gonic/gin"
+)
+
+func init() {
+	// 加载配置
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatalf("加载配置失败: %v", err)
+	}
+
+	// 初始化数据库连接
+	if err := database.InitializeConnections(cfg); err != nil {
+		log.Fatalf("初始化数据库连接失败: %v", err)
+	}
+}
+
+func main() {
+	router := gin.Default()
+
+	// 添加健康检查路由
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":  "ok",
+			"message": "服务运行正常",
+		})
+	})
+
+	router.POST("/signup")
+
+	// 优雅关闭
+	go func() {
+		if err := router.Run(":8080"); err != nil {
+			log.Fatalf("启动服务器失败: %v", err)
+		}
+	}()
+
+	// 等待中断信号
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("正在关闭服务器...")
+
+	// 关闭数据库连接
+	if database.GlobalConnections != nil {
+		database.GlobalConnections.Close()
+	}
+
+	log.Println("服务器已关闭")
+}
