@@ -15,3 +15,15 @@ func IsValidPassword(password string) bool {
 	re := regexp.MustCompile(passwordRegex)
 	return re.MatchString(password)
 }
+
+func IsValidMobile(mobile string) bool {
+	var mobileRegex = `^1[3-9]\d{9}$`
+	re := regexp.MustCompile(mobileRegex)
+	return re.MatchString(mobile)
+}
+
+func IsValidVerificationCode(code string) bool {
+	var codeRegex = `^\d{6}$`
+	re := regexp.MustCompile(codeRegex)
+	return re.MatchString(code)
+}

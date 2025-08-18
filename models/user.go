@@ -52,3 +52,14 @@ type UpdateUserInfoRequest struct {
 type DeleteUserRequest struct {
 	UserId int64 `json:"user_id"`
 }
+
+type LoginByMobileRequest struct {
+	Mobile           *string `json:"mobile"`
+	VerificationCode *string `json:"verification_code"`
+}
+
+type LoginByMobileResponse struct {
+	UserInfo   *UserInfo `json:"user_info"`
+	Token      *string   `json:"token"`
+	ExpireTime int64     `json:"expire_time"`
+}

@@ -3,25 +3,33 @@ package handler
 import (
 	"awesomeEval/errorsc"
 	"awesomeEval/models"
+	"awesomeEval/service/sms"
 	"awesomeEval/utils"
+	"context"
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+	"math/rand"
 	"strconv"
 	"time"
 )
 
 type UserHandler struct {
-	DB    *gorm.DB
-	Redis *redis.Client
+	DB        *gorm.DB
+	Redis     *redis.Client
+	Ctx       context.Context
+	SmsSender *sms.MockSmsService
 }
 
 // NewUserHandler 创建一个新的 UserHandler 实例
-func NewUserHandler(globalDB *gorm.DB, globalRedis *redis.Client) *UserHandler {
+func NewUserHandler(globalDB *gorm.DB, globalRedis *redis.Client, ctx context.Context, smsSender *sms.MockSmsService) *UserHandler {
 	return &UserHandler{
-		DB:    globalDB,
-		Redis: globalRedis,
+		DB:        globalDB,
+		Redis:     globalRedis,
+		Ctx:       ctx,
+		SmsSender: smsSender,
 	}
 }
 
@@ -93,9 +101,78 @@ func (h *UserHandler) Signup(c *gin.Context) {
 
 // LoginByMobile 处理用户登录手机号+验证码请求
 func (h *UserHandler) LoginByMobile(c *gin.Context) {
-	// 这里可以添加用户登录的逻辑
-	// 例如解析请求体、验证用户凭据、生成 JWT 等
-	// 示例响应
+	var user models.LoginByMobileRequest
+	if err := c.ShouldBindBodyWithJSON(&user); err != nil {
+		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		return
+	}
+	if *user.Mobile == "" || *user.VerificationCode == "" {
+		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		return
+	}
+	// validate mobile format
+	if !utils.IsValidMobile(*user.Mobile) {
+		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		return
+	}
+	// validate verification code
+	if !utils.IsValidVerificationCode(*user.VerificationCode) {
+		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		return
+	}
+	// 从 Redis 中获取验证码
+	key := fmt.Sprintf("login:code:%s", *user.Mobile)
+	code, err := h.Redis.Get(h.Ctx, key).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+			return
+		}
+		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		return
+	}
+	// 验证验证码是否匹配
+	if code != *user.VerificationCode {
+		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		return
+	}
+	// 查询用户是否存在
+	var userDB models.UserDB
+	if err := h.DB.Where("mobile = ?", user.Mobile).First(&userDB).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 如果用户不存在，可以选择创建新用户
+			userDB = models.UserDB{
+				Email:     nil, // 新用户没有邮箱
+				Password:  nil, // 新用户没有密码
+				Mobile:    user.Mobile,
+				AvatarUrl: nil,
+				NickName:  nil,
+			}
+			if err := h.DB.Create(&userDB).Error; err != nil {
+				c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+				return
+			}
+		} else {
+			c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+			return
+		}
+	}
+	// 登录成功，生成令牌
+	tokenString, err := utils.GenerateJWT(userDB.ID)
+	if err != nil {
+		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		return
+	}
+	c.JSON(200, models.LoginByMobileResponse{
+		UserInfo: &models.UserInfo{
+			ID:        userDB.ID,
+			Email:     *userDB.Email,
+			AvatarUrl: *userDB.AvatarUrl,
+			NickName:  *userDB.NickName,
+		},
+		Token:      &tokenString,                                // 这里可以生成 JWT 或其他类型的令牌
+		ExpireTime: time.Now().Add(utils.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
+	})
 }
 
 // GetUserInfo 获取用户信息
@@ -273,4 +350,16 @@ func (h *UserHandler) GetUserFromDB(id int64, nickname string, mobile string, em
 	}
 
 	return users, nil
+}
+
+func (h *UserHandler) SendSMSCode(phone string) error {
+	code := fmt.Sprintf("%06d", rand.Intn(1000000))
+	key := fmt.Sprintf("login:code:%s", phone)
+	// 写入 Redis，5 分钟过期
+	err := h.Redis.Set(h.Ctx, key, code, 5*time.Minute).Err()
+	if err != nil {
+		return err
+	}
+	// 调用第三方短信服务发送
+	return h.SmsSender.Send(phone, code)
 }
