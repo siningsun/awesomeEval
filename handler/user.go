@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+	"time"
 )
 
 type UserHandler struct {
@@ -72,11 +73,15 @@ func (h *UserHandler) Signup(c *gin.Context) {
 		c.JSON(500, error.NewByCode(error.CommonDbErrorCode, ""))
 		return
 	}
-
+	tokenString, err := utils.GenerateJWT(userDB.ID)
+	if err != nil {
+		c.JSON(500, error.NewByCode(error.CommonInternalErrorCode, ""))
+		return
+	}
 	c.JSON(200, models.UserRegisterResponse{
 		UserInfo:   &userDB,
-		Token:      nil, // 这里可以生成 JWT 或其他类型的令牌
-		ExpireTime: nil, // 这里可以设置令牌的过期时间
+		Token:      &tokenString,                                // 这里可以生成 JWT 或其他类型的令牌
+		ExpireTime: time.Now().Add(utils.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
 	})
 }
 
@@ -137,9 +142,14 @@ func (h *UserHandler) LoginByPassword(c *gin.Context) {
 		return
 	}
 	// login successful, generate token
+	tokenString, err := utils.GenerateJWT(userDB.ID)
+	if err != nil {
+		c.JSON(500, error.NewByCode(error.CommonInternalErrorCode, ""))
+		return
+	}
 	c.JSON(200, models.UserLoginByPasswordResponse{
 		UserInfo:   &userDB,
-		Token:      nil, // 这里可以生成 JWT 或其他类型的令牌
-		ExpireTime: nil, // 这里可以设置令牌的过期时间
+		Token:      &tokenString,                                // 这里可以生成 JWT 或其他类型的令牌
+		ExpireTime: time.Now().Add(utils.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
 	})
 }

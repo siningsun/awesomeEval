@@ -17,7 +17,7 @@ type UserRegisterRequest struct {
 type UserRegisterResponse struct {
 	UserInfo   *UserDB `json:"user_info"`
 	Token      *string `json:"token"`
-	ExpireTime *int64  `json:"expire_time"`
+	ExpireTime int64   `json:"expire_time"`
 }
 
 type UserLoginByPasswordRequest struct {
@@ -27,5 +27,5 @@ type UserLoginByPasswordRequest struct {
 type UserLoginByPasswordResponse struct {
 	UserInfo   *UserDB `json:"user_info"`
 	Token      *string `json:"token"`
-	ExpireTime *int64  `json:"expire_time"`
+	ExpireTime int64   `json:"expire_time"`
 }

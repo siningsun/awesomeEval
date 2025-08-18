@@ -1,6 +1,7 @@
 package main
 
 import (
+	"awesomeEval/handler"
 	"log"
 	"os"
 	"os/signal"
@@ -34,7 +35,11 @@ func main() {
 		})
 	})
 
-	router.POST("/signup")
+	// New UserHandler
+	userHandler := handler.NewUserHandler(config.GlobalConnections.PostgreSQL, config.GlobalConnections.Redis)
+
+	router.POST("/signup", userHandler.Signup)
+	router.POST("/loginByPassword", userHandler.LoginByPassword)
 
 	// 优雅关闭
 	go func() {
