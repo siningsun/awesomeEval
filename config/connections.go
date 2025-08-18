@@ -1,28 +1,25 @@
-package database
+package config
 
 import (
 	"context"
 	"fmt"
-	"log"
-	"time"
-
-	"awesomeEval/config"
-
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	amqp "github.com/streadway/amqp"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"log"
+	"time"
 )
 
 type Connections struct {
-	PostgreSQL *sqlx.DB
+	PostgreSQL *gorm.DB
 	Redis      *redis.Client
 	RabbitMQ   *amqp.Connection
 }
 
 var GlobalConnections *Connections
 
-func InitializeConnections(cfg *config.Config) error {
+func InitializeConnections(cfg *Config) error {
 	conns := &Connections{}
 
 	// 初始化PostgreSQL连接
@@ -45,29 +42,28 @@ func InitializeConnections(cfg *config.Config) error {
 	return nil
 }
 
-func (c *Connections) initPostgreSQL(cfg config.PostgreSQLConfig) error {
+func (c *Connections) initPostgreSQL(cfg PostgreSQLConfig) error {
 	dsn := cfg.GetDSN()
-	db, err := sqlx.Connect("postgres", dsn)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("连接PostgreSQL失败: %w", err)
 	}
-
-	// 设置连接池参数
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(25)
-	db.SetConnMaxLifetime(5 * time.Minute)
-
+	sqlDB, err := db.DB()
 	// 测试连接
-	if err := db.Ping(); err != nil {
+	if err := sqlDB.Ping(); err != nil {
 		return fmt.Errorf("PostgreSQL连接测试失败: %w", err)
 	}
-
+	// 设置连接池参数
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(25)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	// 赋值
 	c.PostgreSQL = db
 	log.Println("PostgreSQL连接成功")
 	return nil
 }
 
-func (c *Connections) initRedis(cfg config.RedisConfig) error {
+func (c *Connections) initRedis(cfg RedisConfig) error {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     cfg.GetAddr(),
 		Password: cfg.Password,
@@ -87,7 +83,7 @@ func (c *Connections) initRedis(cfg config.RedisConfig) error {
 	return nil
 }
 
-func (c *Connections) initRabbitMQ(cfg config.RabbitMQConfig) error {
+func (c *Connections) initRabbitMQ(cfg RabbitMQConfig) error {
 	url := cfg.GetURL()
 	conn, err := amqp.Dial(url)
 	if err != nil {
@@ -101,7 +97,8 @@ func (c *Connections) initRabbitMQ(cfg config.RabbitMQConfig) error {
 
 func (c *Connections) Close() {
 	if c.PostgreSQL != nil {
-		if err := c.PostgreSQL.Close(); err != nil {
+		sqlDB, _ := c.PostgreSQL.DB()
+		if err := sqlDB.Close(); err != nil {
 			log.Printf("关闭PostgreSQL连接失败: %v", err)
 		}
 	}
@@ -121,15 +118,15 @@ func (c *Connections) Close() {
 	log.Println("所有数据库连接已关闭")
 }
 
-// 获取PostgreSQL连接
-func GetPostgreSQL() *sqlx.DB {
+// GetPostgreSQL 获取PostgreSQL连接
+func GetPostgreSQL() *gorm.DB {
 	if GlobalConnections != nil {
 		return GlobalConnections.PostgreSQL
 	}
 	return nil
 }
 
-// 获取Redis连接
+// GetRedis 获取Redis连接
 func GetRedis() *redis.Client {
 	if GlobalConnections != nil {
 		return GlobalConnections.Redis
@@ -137,7 +134,7 @@ func GetRedis() *redis.Client {
 	return nil
 }
 
-// 获取RabbitMQ连接
+// GetRabbitMQ 获取RabbitMQ连接
 func GetRabbitMQ() *amqp.Connection {
 	if GlobalConnections != nil {
 		return GlobalConnections.RabbitMQ

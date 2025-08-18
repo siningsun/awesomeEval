@@ -1,10 +1,20 @@
 package models
 
-type User struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	Avatar   string `json:"avatar"`
+type UserDB struct {
+	ID        int64   `gorm:"primarykey;autoIncrement;column:id" json:"id"`
+	Password  *string `gorm:"column:password;type:varchar(255);not null;comment:密码" json:"password"`
+	Email     *string `gorm:"column:email;type:varchar(255);uniqueIndex;not null;comment:邮箱" json:"email"`
+	AvatarUrl *string `gorm:"avatar_url;null" json:"avatar_url"`
+	NickName  *string `gorm:"nickname;null" json:"nickname"`
+	Mobile    *string `gorm:"mobile;null" json:"mobile"`
+}
+
+type UserRegisterRequest struct {
+	Email    *string `json:"email"`
+	Password *string `json:"password"`
+}
+type UserRegisterResponse struct {
+	UserInfo   *UserDB `json:"user_info"`
+	Token      *string `json:"token"`
+	ExpireTime *int64  `json:"expire_time"`
 }

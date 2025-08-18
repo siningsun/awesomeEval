@@ -7,8 +7,6 @@ import (
 	"syscall"
 
 	"awesomeEval/config"
-	"awesomeEval/database"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,7 +18,7 @@ func init() {
 	}
 
 	// 初始化数据库连接
-	if err := database.InitializeConnections(cfg); err != nil {
+	if err := config.InitializeConnections(cfg); err != nil {
 		log.Fatalf("初始化数据库连接失败: %v", err)
 	}
 }
@@ -53,8 +51,8 @@ func main() {
 	log.Println("正在关闭服务器...")
 
 	// 关闭数据库连接
-	if database.GlobalConnections != nil {
-		database.GlobalConnections.Close()
+	if config.GlobalConnections != nil {
+		config.GlobalConnections.Close()
 	}
 
 	log.Println("服务器已关闭")

@@ -2,8 +2,8 @@ postgresql:
   host: localhost
   port: 5432
   user: postgres
-  password: password
-  dbname: awesome_eval
+  password: ssss
+  dbname: awesome-eval
   sslmode: disable
 
 redis:
@@ -15,6 +15,6 @@ redis:
 rabbitmq:
   host: localhost
   port: 5672
-  user: guest
-  password: guest
+  user: admin
+  password: admin
   vhost: / 

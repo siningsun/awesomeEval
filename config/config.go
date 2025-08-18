@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log"
 
@@ -56,12 +57,9 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("rabbitmq.port", 5672)
 	viper.SetDefault("rabbitmq.vhost", "/")
 
-	// 从环境变量读取配置
-	viper.AutomaticEnv()
-	viper.SetEnvPrefix("APP")
-
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundError) {
 			return nil, fmt.Errorf("读取配置文件失败: %w", err)
 		}
 		log.Println("配置文件未找到，使用默认配置和环境变量")
