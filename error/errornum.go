@@ -5,6 +5,8 @@ const (
 	CommonInternalErrorCode = 1002
 	CommonDbErrorCode       = 1003
 	UserAlreadyExistsCode   = 2001
+	UserNotFoundCode        = 2002
+	PasswordMismatchCode    = 2003
 )
 
 var DefaultMessages = map[int]map[string]string{
@@ -23,6 +25,14 @@ var DefaultMessages = map[int]map[string]string{
 	UserAlreadyExistsCode: {
 		"en": "User already exists",
 		"cn": "用户已存在",
+	},
+	UserNotFoundCode: {
+		"en": "User not found",
+		"cn": "用户未找到",
+	},
+	PasswordMismatchCode: {
+		"en": "Password mismatch",
+		"cn": "密码不匹配",
 	},
 }
 
