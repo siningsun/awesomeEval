@@ -1,13 +1,17 @@
 package models
 
+import (
+	"awesomeEval/utils"
+)
+
 type UserDB struct {
-	ID        int64   `gorm:"primarykey;autoIncrement;column:id" json:"id"`
-	Password  *string `gorm:"column:password;type:varchar(255);not null;comment:密码" json:"password"`
-	Email     *string `gorm:"column:email;type:varchar(255);uniqueIndex;not null;comment:邮箱" json:"email"`
-	AvatarUrl *string `gorm:"avatar_url;null" json:"avatar_url"`
-	NickName  *string `gorm:"nickname;null" json:"nickname"`
-	Mobile    *string `gorm:"mobile;null" json:"mobile"`
-	IsDeleted bool    `gorm:"column:is_deleted;default:false;not null;comment:是否删除" json:"is_deleted"`
+	utils.BaseModel
+	Password  *string `gorm:"column:password;" json:"password"`
+	Email     *string `gorm:"column:email;" json:"email"`
+	AvatarUrl *string `gorm:"avatar_url" json:"avatar_url"`
+	NickName  *string `gorm:"nickname" json:"nickname"`
+	Mobile    *string `gorm:"mobile" json:"mobile"`
+	IsDeleted bool    `gorm:"column:is_deleted;" json:"is_deleted"`
 }
 
 type UserRegisterRequest struct {
@@ -15,9 +19,9 @@ type UserRegisterRequest struct {
 	Password *string `json:"password"`
 }
 type UserRegisterResponse struct {
-	UserInfo   *UserDB `json:"user_info"`
-	Token      *string `json:"token"`
-	ExpireTime int64   `json:"expire_time"`
+	UserInfo   *UserInfo `json:"user_info"`
+	Token      *string   `json:"token"`
+	ExpireTime int64     `json:"expire_time"`
 }
 
 type UserLoginByPasswordRequest struct {
@@ -25,7 +29,26 @@ type UserLoginByPasswordRequest struct {
 	Password *string `json:"password"`
 }
 type UserLoginByPasswordResponse struct {
-	UserInfo   *UserDB `json:"user_info"`
-	Token      *string `json:"token"`
-	ExpireTime int64   `json:"expire_time"`
+	UserInfo   *UserInfo `json:"user_info"`
+	Token      *string   `json:"token"`
+	ExpireTime int64     `json:"expire_time"`
+}
+
+type UserInfo struct {
+	ID        int64  `json:"id"`
+	Email     string `json:"email"`
+	AvatarUrl string `json:"avatar_url"`
+	NickName  string `json:"nickname"`
+	Mobile    string `json:"mobile"`
+}
+
+type UpdateUserInfoRequest struct {
+	UserId    int64   `json:"user_id"`
+	NickName  *string `json:"nickname"`
+	AvatarUrl *string `json:"avatar_url"`
+	Mobile    *string `json:"mobile"`
+}
+
+type DeleteUserRequest struct {
+	UserId int64 `json:"user_id"`
 }

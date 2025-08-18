@@ -1,4 +1,4 @@
-package error
+package errorsc
 
 const (
 	LangEN = "en"
