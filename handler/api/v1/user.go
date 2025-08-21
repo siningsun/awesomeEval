@@ -1,4 +1,4 @@
-package handler
+package v1
 
 import (
 	"awesomeEval/errorsc"
@@ -24,11 +24,10 @@ type UserHandler struct {
 }
 
 // NewUserHandler 创建一个新的 UserHandler 实例
-func NewUserHandler(globalDB *gorm.DB, globalRedis *redis.Client, ctx context.Context, smsSender *sms.MockSmsService) *UserHandler {
+func NewUserHandler(globalDB *gorm.DB, globalRedis *redis.Client, smsSender *sms.MockSmsService) *UserHandler {
 	return &UserHandler{
 		DB:        globalDB,
 		Redis:     globalRedis,
-		Ctx:       ctx,
 		SmsSender: smsSender,
 	}
 }
@@ -352,14 +351,29 @@ func (h *UserHandler) GetUserFromDB(id int64, nickname string, mobile string, em
 	return users, nil
 }
 
-func (h *UserHandler) SendSMSCode(phone string) error {
+func (h *UserHandler) SendSMSCode(c *gin.Context) {
+	var request models.SendVerificationCodeRequest
+	if err := c.ShouldBindBodyWithJSON(&request); err != nil {
+		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		return
+	}
+	if request.Mobile == "" {
+		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		return
+	}
 	code := fmt.Sprintf("%06d", rand.Intn(1000000))
-	key := fmt.Sprintf("login:code:%s", phone)
+	key := fmt.Sprintf("login:code:%s", request.Mobile)
 	// 写入 Redis，5 分钟过期
-	err := h.Redis.Set(h.Ctx, key, code, 5*time.Minute).Err()
+	err := h.Redis.Set(c.Request.Context(), key, code, 5*time.Minute).Err()
 	if err != nil {
-		return err
+		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		return
 	}
 	// 调用第三方短信服务发送
-	return h.SmsSender.Send(phone, code)
+	err = h.SmsSender.Send(request.Mobile, code)
+	if err != nil {
+		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		return
+	}
+	c.JSON(200, gin.H{"message": "SMS code sent successfully"}) // 返回成功消息
 }

@@ -1,7 +1,8 @@
 package main
 
 import (
-	"awesomeEval/handler"
+	"awesomeEval/handler/api/v1"
+	"awesomeEval/service/sms"
 	"log"
 	"os"
 	"os/signal"
@@ -26,7 +27,6 @@ func init() {
 
 func main() {
 	router := gin.Default()
-
 	// 添加健康检查路由
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -34,9 +34,8 @@ func main() {
 			"message": "服务运行正常",
 		})
 	})
-
 	// New UserHandler
-	userHandler := handler.NewUserHandler(config.GlobalConnections.PostgreSQL, config.GlobalConnections.Redis)
+	userHandler := v1.NewUserHandler(config.GlobalConnections.PostgreSQL, config.GlobalConnections.Redis, &sms.MockSmsService{})
 
 	router.POST("/signup", userHandler.Signup)
 	router.POST("/loginByPassword", userHandler.LoginByPassword)

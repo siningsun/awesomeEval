@@ -63,3 +63,7 @@ type LoginByMobileResponse struct {
 	Token      *string   `json:"token"`
 	ExpireTime int64     `json:"expire_time"`
 }
+
+type SendVerificationCodeRequest struct {
+	Mobile string `json:"mobile"`
+}
