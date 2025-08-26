@@ -98,3 +98,7 @@ func (c *RabbitMQConfig) GetURL() string {
 	return fmt.Sprintf("amqp://%s:%s@%s:%d/%s",
 		c.User, c.Password, c.Host, c.Port, c.VHost)
 }
+
+func (c *MinioConfig) GetDSN() string {
+	return fmt.Sprintf("%s (AccessKeyID: %s, Bucket: %s)", c.Endpoint, c.AccessKeyID, c.BucketName)
+}
