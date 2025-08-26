@@ -2,6 +2,7 @@ package dataset
 
 import (
 	"awesomeEval/internal/models"
+	"bufio"
 	"context"
 	"encoding/json"
 	"github.com/google/uuid"
@@ -92,6 +93,7 @@ func (s *Service) CreateDataset(file multipart.File, header *multipart.FileHeade
 		JobType:   "import",
 		Status:    "pending",
 		UserID:    uint(userID),
+		FilePath:  objectName,
 	}
 	if err := tx.Create(job).Error; err != nil {
 		tx.Rollback()
@@ -145,5 +147,94 @@ func (s *Service) CreateDataset(file multipart.File, header *multipart.FileHeade
 		return err
 	}
 
+	return nil
+}
+
+func (s *Service) ProcessDatasetJob(ctx context.Context, m *models.DatasetIOJob) error {
+	// 模拟处理时间
+	log.Printf("Processing dataset job ID %d of type %s", m.ID, m.JobType)
+	switch m.JobType {
+	case "import":
+		log.Printf("Importing dataset ID %d", m.DatasetID)
+		err := s.RunInsertDatasetItemsJob(m)
+		if err != nil {
+			return err
+		}
+	case "export":
+		log.Printf("Exporting dataset ID %d", m.DatasetID)
+		//todo: 实现导出逻辑
+	default:
+		log.Printf("Unknown job type: %s", m.JobType)
+	}
+	// 更新 Job 状态为 completed
+	if err := s.DB.Model(&models.DatasetIOJob{}).Where("id = ?", m.ID).Updates(map[string]interface{}{
+		"status":     "completed",
+		"updated_at": gorm.Expr("NOW()"),
+	}).Error; err != nil {
+		log.Printf("Failed to update job status: %v", err)
+		return err
+	}
+
+	log.Printf("Completed dataset job ID %d", m.ID)
+	return nil
+}
+
+func (s *Service) RunInsertDatasetItemsJob(job *models.DatasetIOJob) error {
+	// 从 MinIO 下载文件
+	bucketName := "datasets"
+	objectName := job.FilePath
+
+	object, err := s.MinioClient.GetObject(context.Background(), bucketName, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		log.Printf("MinIO get object error: %v", err)
+		return err
+	}
+	defer object.Close()
+
+	// 读取数据集，jsonl格式, 每行一个 JSON 对象
+	var items []models.DatasetItem
+	scanner := bufio.NewScanner(object)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			items = append(items, models.DatasetItem{
+				DatasetID:  job.DatasetID,
+				RawContent: line,
+				UserID:     job.UserID,
+				IsDeleted:  false,
+			})
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading from object: %v", err)
+		return err
+	}
+
+	// 批量插入数据项
+	tx := s.DB.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	batchSize := 500
+	for i := 0; i < len(items); i += batchSize {
+		end := i + batchSize
+		if end > len(items) {
+			end = len(items)
+		}
+		batch := items[i:end]
+		if err := tx.Create(&batch).Error; err != nil {
+			log.Printf("DB insert error: %v", err)
+			tx.Rollback()
+			return err
+		}
+	}
+	// 提交事务
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("DB commit error: %v", err)
+		return err
+	}
 	return nil
 }

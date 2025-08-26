@@ -15,6 +15,7 @@ type DatasetIOJob struct {
 	JobType   string `json:"job_type"` // e.g., "import" or "export"
 	Status    string `json:"status"`   // e.g., "pending", "in_progress", "completed", "failed"
 	UserID    uint   `json:"user_id"`
+	FilePath  string `json:"file_path"`
 }
 
 type DatasetItem struct {
