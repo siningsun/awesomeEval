@@ -1,11 +1,10 @@
-package v1
+package handler
 
 import (
-	"awesomeEval/errorsc"
-	"awesomeEval/models"
-	"awesomeEval/service/sms"
-	"awesomeEval/utils"
-	"context"
+	"awesomeEval/internal/codes"
+	"awesomeEval/internal/models"
+	"awesomeEval/internal/service/sms"
+	utils2 "awesomeEval/internal/utils"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -19,7 +18,6 @@ import (
 type UserHandler struct {
 	DB        *gorm.DB
 	Redis     *redis.Client
-	Ctx       context.Context
 	SmsSender *sms.MockSmsService
 }
 
@@ -36,38 +34,38 @@ func NewUserHandler(globalDB *gorm.DB, globalRedis *redis.Client, smsSender *sms
 func (h *UserHandler) Signup(c *gin.Context) {
 	var user models.UserRegisterRequest
 	if err := c.ShouldBindBodyWithJSON(&user); err != nil {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	if *user.Email == "" || *user.Password == "" {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// validate email format
-	if !utils.IsValidEmail(*user.Email) {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+	if !utils2.IsValidEmail(*user.Email) {
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// validate password strength
-	if !utils.IsValidPassword(*user.Password) {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+	if !utils2.IsValidPassword(*user.Password) {
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// validate email uniqueness
 	var existingUser models.UserDB
 	if err := h.DB.Where("email = ?", user.Email).First(&existingUser).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+			c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 			return
 		}
 	} else {
-		c.JSON(400, errorsc.NewByCode(errorsc.UserAlreadyExistsCode, ""))
+		c.JSON(400, codes.NewByCode(codes.UserAlreadyExistsCode, ""))
 		return
 	}
 	// 创建新用户
-	hashedPassword, err := utils.HashPassword(*user.Password)
+	hashedPassword, err := utils2.HashPassword(*user.Password)
 	if err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonInternalErrorCode, ""))
 		return
 	}
 	userDB := models.UserDB{
@@ -78,12 +76,12 @@ func (h *UserHandler) Signup(c *gin.Context) {
 		Mobile:    nil,
 	}
 	if err := h.DB.Create(&userDB).Error; err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 		return
 	}
-	tokenString, err := utils.GenerateJWT(userDB.ID)
+	tokenString, err := utils2.GenerateJWT(userDB.ID)
 	if err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonInternalErrorCode, ""))
 		return
 	}
 	c.JSON(200, models.UserRegisterResponse{
@@ -93,8 +91,8 @@ func (h *UserHandler) Signup(c *gin.Context) {
 			AvatarUrl: *userDB.AvatarUrl,
 			NickName:  *userDB.NickName,
 		},
-		Token:      &tokenString,                                // 这里可以生成 JWT 或其他类型的令牌
-		ExpireTime: time.Now().Add(utils.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
+		Token:      &tokenString,                                 // 这里可以生成 JWT 或其他类型的令牌
+		ExpireTime: time.Now().Add(utils2.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
 	})
 }
 
@@ -102,37 +100,37 @@ func (h *UserHandler) Signup(c *gin.Context) {
 func (h *UserHandler) LoginByMobile(c *gin.Context) {
 	var user models.LoginByMobileRequest
 	if err := c.ShouldBindBodyWithJSON(&user); err != nil {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	if *user.Mobile == "" || *user.VerificationCode == "" {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// validate mobile format
-	if !utils.IsValidMobile(*user.Mobile) {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+	if !utils2.IsValidMobile(*user.Mobile) {
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// validate verification code
-	if !utils.IsValidVerificationCode(*user.VerificationCode) {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+	if !utils2.IsValidVerificationCode(*user.VerificationCode) {
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// 从 Redis 中获取验证码
 	key := fmt.Sprintf("login:code:%s", *user.Mobile)
-	code, err := h.Redis.Get(h.Ctx, key).Result()
+	code, err := h.Redis.Get(c.Request.Context(), key).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+			c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 			return
 		}
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonInternalErrorCode, ""))
 		return
 	}
 	// 验证验证码是否匹配
 	if code != *user.VerificationCode {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// 查询用户是否存在
@@ -148,20 +146,22 @@ func (h *UserHandler) LoginByMobile(c *gin.Context) {
 				NickName:  nil,
 			}
 			if err := h.DB.Create(&userDB).Error; err != nil {
-				c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+				c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 				return
 			}
 		} else {
-			c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+			c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 			return
 		}
 	}
 	// 登录成功，生成令牌
-	tokenString, err := utils.GenerateJWT(userDB.ID)
+	tokenString, err := utils2.GenerateJWT(userDB.ID)
 	if err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonInternalErrorCode, ""))
 		return
 	}
+	// 删除已使用的验证码
+	h.Redis.Del(c.Request.Context(), key)
 	c.JSON(200, models.LoginByMobileResponse{
 		UserInfo: &models.UserInfo{
 			ID:        userDB.ID,
@@ -169,8 +169,8 @@ func (h *UserHandler) LoginByMobile(c *gin.Context) {
 			AvatarUrl: *userDB.AvatarUrl,
 			NickName:  *userDB.NickName,
 		},
-		Token:      &tokenString,                                // 这里可以生成 JWT 或其他类型的令牌
-		ExpireTime: time.Now().Add(utils.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
+		Token:      &tokenString,                                 // 这里可以生成 JWT 或其他类型的令牌
+		ExpireTime: time.Now().Add(utils2.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
 	})
 }
 
@@ -178,21 +178,21 @@ func (h *UserHandler) LoginByMobile(c *gin.Context) {
 func (h *UserHandler) GetUserInfo(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	userId, err := strconv.Atoi(id)
 	if err != nil {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	userList, err := h.GetUserFromDB(int64(userId), "", "", "")
 	if err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 		return
 	}
 	if len(userList) == 0 {
-		c.JSON(404, errorsc.NewByCode(errorsc.UserNotFoundCode, ""))
+		c.JSON(404, codes.NewByCode(codes.UserNotFoundCode, ""))
 		return
 	}
 	user := userList[0]
@@ -209,25 +209,25 @@ func (h *UserHandler) UpdateUserInfo(c *gin.Context) {
 	// 这里可以添加更新用户信息的逻辑
 	var updateRequest models.UpdateUserInfoRequest
 	if err := c.ShouldBindBodyWithJSON(&updateRequest); err != nil {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	if updateRequest.UserId <= 0 {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	if updateRequest.NickName == nil && updateRequest.AvatarUrl == nil && updateRequest.Mobile == nil {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// 查询用户是否存在
 	var userDB models.UserDB
 	if err := h.DB.Where("id = ?", updateRequest.UserId).First(&userDB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(404, errorsc.NewByCode(errorsc.UserNotFoundCode, ""))
+			c.JSON(404, codes.NewByCode(codes.UserNotFoundCode, ""))
 			return
 		}
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 		return
 	}
 	// 更新用户信息
@@ -241,7 +241,7 @@ func (h *UserHandler) UpdateUserInfo(c *gin.Context) {
 		userDB.Mobile = updateRequest.Mobile
 	}
 	if err := h.DB.Save(&userDB).Error; err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 		return
 	}
 	c.JSON(200, models.UserInfo{
@@ -257,25 +257,25 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 	// 这里可以添加删除用户的逻辑
 	var deleteRequest models.DeleteUserRequest
 	if err := c.ShouldBindBodyWithJSON(&deleteRequest); err != nil {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	if deleteRequest.UserId <= 0 {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// 例如从数据库中删除用户记录
 	var userDB models.UserDB
 	if err := h.DB.Where("id = ?", deleteRequest.UserId).First(&userDB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(404, errorsc.NewByCode(errorsc.UserNotFoundCode, ""))
+			c.JSON(404, codes.NewByCode(codes.UserNotFoundCode, ""))
 			return
 		}
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 		return
 	}
 	if err := h.DB.Delete(&userDB).Error; err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 		return
 	}
 	c.JSON(200, gin.H{"message": "User deleted successfully"}) // 返回成功消息
@@ -284,35 +284,35 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 func (h *UserHandler) LoginByPassword(c *gin.Context) {
 	var user models.UserLoginByPasswordRequest
 	if err := c.ShouldBindBodyWithJSON(&user); err != nil {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 	}
 	if *user.Email == "" || *user.Password == "" {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	// validate email format
-	if !utils.IsValidEmail(*user.Email) {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+	if !utils2.IsValidEmail(*user.Email) {
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	userDB := models.UserDB{}
 	if err := h.DB.Where("email = ?", user.Email).First(&userDB).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(400, errorsc.NewByCode(errorsc.UserNotFoundCode, ""))
+			c.JSON(400, codes.NewByCode(codes.UserNotFoundCode, ""))
 			return
 		}
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonDbErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonDbErrorCode, ""))
 		return
 	}
-	err := utils.ComparePassword(*userDB.Password, *user.Password)
+	err := utils2.ComparePassword(*userDB.Password, *user.Password)
 	if err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.PasswordMismatchCode, ""))
+		c.JSON(500, codes.NewByCode(codes.PasswordMismatchCode, ""))
 		return
 	}
 	// login successful, generate token
-	tokenString, err := utils.GenerateJWT(userDB.ID)
+	tokenString, err := utils2.GenerateJWT(userDB.ID)
 	if err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonInternalErrorCode, ""))
 		return
 	}
 	c.JSON(200, models.UserLoginByPasswordResponse{
@@ -322,8 +322,8 @@ func (h *UserHandler) LoginByPassword(c *gin.Context) {
 			AvatarUrl: *userDB.AvatarUrl,
 			NickName:  *userDB.NickName,
 		},
-		Token:      &tokenString,                                // 这里可以生成 JWT 或其他类型的令牌
-		ExpireTime: time.Now().Add(utils.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
+		Token:      &tokenString,                                 // 这里可以生成 JWT 或其他类型的令牌
+		ExpireTime: time.Now().Add(utils2.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
 	})
 }
 
@@ -354,11 +354,11 @@ func (h *UserHandler) GetUserFromDB(id int64, nickname string, mobile string, em
 func (h *UserHandler) SendSMSCode(c *gin.Context) {
 	var request models.SendVerificationCodeRequest
 	if err := c.ShouldBindBodyWithJSON(&request); err != nil {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	if request.Mobile == "" {
-		c.JSON(400, errorsc.NewByCode(errorsc.CommonInvalidParamCode, ""))
+		c.JSON(400, codes.NewByCode(codes.CommonInvalidParamCode, ""))
 		return
 	}
 	code := fmt.Sprintf("%06d", rand.Intn(1000000))
@@ -366,13 +366,13 @@ func (h *UserHandler) SendSMSCode(c *gin.Context) {
 	// 写入 Redis，5 分钟过期
 	err := h.Redis.Set(c.Request.Context(), key, code, 5*time.Minute).Err()
 	if err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonInternalErrorCode, ""))
 		return
 	}
 	// 调用第三方短信服务发送
 	err = h.SmsSender.Send(request.Mobile, code)
 	if err != nil {
-		c.JSON(500, errorsc.NewByCode(errorsc.CommonInternalErrorCode, ""))
+		c.JSON(500, codes.NewByCode(codes.CommonInternalErrorCode, ""))
 		return
 	}
 	c.JSON(200, gin.H{"message": "SMS code sent successfully"}) // 返回成功消息

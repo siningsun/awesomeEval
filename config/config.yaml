@@ -17,4 +17,11 @@ rabbitmq:
   port: 5672
   user: admin
   password: admin
-  vhost: / 
+  vhost: /
+
+minio:
+  endpoint: localhost:9000
+  accessKeyID: minioadmin
+  secretAccessKey: minioadmin
+  useSSL: false
+  bucketName: my-bucket

@@ -1,7 +1,7 @@
 package models
 
 import (
-	"awesomeEval/utils"
+	"awesomeEval/internal/utils"
 )
 
 type UserDB struct {

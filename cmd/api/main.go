@@ -1,8 +1,9 @@
 package main
 
 import (
-	"awesomeEval/handler/api/v1"
-	"awesomeEval/service/sms"
+	"awesomeEval/internal/handler"
+	"awesomeEval/internal/service/dataset"
+	"awesomeEval/internal/service/sms"
 	"log"
 	"os"
 	"os/signal"
@@ -35,10 +36,14 @@ func main() {
 		})
 	})
 	// New UserHandler
-	userHandler := v1.NewUserHandler(config.GlobalConnections.PostgreSQL, config.GlobalConnections.Redis, &sms.MockSmsService{})
-
+	userHandler := handler.NewUserHandler(config.GlobalConnections.PostgreSQL, config.GlobalConnections.Redis, &sms.MockSmsService{})
+	// New DatasetHandler
+	datasetHandler := handler.NewDatasetHandler(&dataset.Service{DB: config.GlobalConnections.PostgreSQL, Conn: config.GlobalConnections.RabbitMQ})
 	router.POST("/signup", userHandler.Signup)
 	router.POST("/loginByPassword", userHandler.LoginByPassword)
+
+	//todo: add auth middleware
+	router.POST("/dataset/create", datasetHandler.CreateDataset)
 
 	// 优雅关闭
 	go func() {

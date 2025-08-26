@@ -1,4 +1,4 @@
-package errorsc
+package codes
 
 const (
 	CommonInvalidParamCode  = 1001
@@ -15,11 +15,11 @@ var DefaultMessages = map[int]map[string]string{
 		"cn": "无效的参数",
 	},
 	CommonInternalErrorCode: {
-		"en": "Internal server errorsc",
+		"en": "Internal server codes",
 		"cn": "服务器内部错误",
 	},
 	CommonDbErrorCode: {
-		"en": "Database errorsc",
+		"en": "Database codes",
 		"cn": "数据库错误",
 	},
 	UserAlreadyExistsCode: {

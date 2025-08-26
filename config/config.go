@@ -38,6 +38,14 @@ type RabbitMQConfig struct {
 	VHost    string `mapstructure:"vhost"`
 }
 
+type MinioConfig struct {
+	Endpoint        string `mapstructure:"endpoint"`
+	AccessKeyID     string `mapstructure:"accessKeyID"`
+	SecretAccessKey string `mapstructure:"secretAccessKey"`
+	BucketName      string `mapstructure:"bucketName"`
+	UseSSL          bool   `mapstructure:"useSSL"`
+}
+
 func LoadConfig() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -56,6 +64,10 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("rabbitmq.host", "localhost")
 	viper.SetDefault("rabbitmq.port", 5672)
 	viper.SetDefault("rabbitmq.vhost", "/")
+
+	viper.SetDefault("minio.endpoint", "localhost:9000")
+	viper.SetDefault("minio.useSSL", false)
+	viper.SetDefault("minio.bucketName", "my-bucket")
 
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError

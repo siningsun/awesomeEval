@@ -3,6 +3,8 @@ package config
 import (
 	"context"
 	"fmt"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/redis/go-redis/v9"
 	amqp "github.com/streadway/amqp"
 	"gorm.io/driver/postgres"
@@ -15,6 +17,7 @@ type Connections struct {
 	PostgreSQL *gorm.DB
 	Redis      *redis.Client
 	RabbitMQ   *amqp.Connection
+	Minio      *minio.Client
 }
 
 var GlobalConnections *Connections
@@ -95,6 +98,19 @@ func (c *Connections) initRabbitMQ(cfg RabbitMQConfig) error {
 	return nil
 }
 
+func (c *Connections) initMinio(cfg MinioConfig) error {
+	minioClient, err := minio.New(cfg.Endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKeyID, cfg.SecretAccessKey, ""),
+		Secure: cfg.UseSSL,
+	})
+	if err != nil {
+		return fmt.Errorf("连接Minio失败: %w", err)
+	}
+	c.Minio = minioClient
+	log.Println("Minio连接成功")
+	return nil
+}
+
 func (c *Connections) Close() {
 	if c.PostgreSQL != nil {
 		sqlDB, _ := c.PostgreSQL.DB()
@@ -138,6 +154,14 @@ func GetRedis() *redis.Client {
 func GetRabbitMQ() *amqp.Connection {
 	if GlobalConnections != nil {
 		return GlobalConnections.RabbitMQ
+	}
+	return nil
+}
+
+// GetMinio 获取Minio连接
+func GetMinio() *minio.Client {
+	if GlobalConnections != nil {
+		return GlobalConnections.Minio
 	}
 	return nil
 }
