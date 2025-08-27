@@ -6,8 +6,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
+	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
 	"gorm.io/gorm"
 	"log"
@@ -19,13 +21,15 @@ type Service struct {
 	Conn        *amqp.Connection
 	DB          *gorm.DB
 	MinioClient *minio.Client
+	RedisClient *redis.Client
 }
 
-func NewService(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Client) *Service {
+func NewService(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Client, redisClient *redis.Client) *Service {
 	return &Service{
 		Conn:        conn,
 		DB:          db,
 		MinioClient: minioClient,
+		RedisClient: redisClient,
 	}
 }
 
@@ -244,4 +248,44 @@ func (s *Service) RunInsertDatasetItemsJob(job *models.DatasetIOJob) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Service) ListDatasets(userId int64, ctx context.Context) ([]models.DatasetResponse, error) {
+	var datasets []models.DatasetDB
+	if err := s.DB.Where("user_id = ? AND is_deleted = false", userId).Find(&datasets).Error; err != nil {
+		return nil, err
+	}
+	var resp []models.DatasetResponse
+	for _, dataset := range datasets {
+		resp = append(resp, models.DatasetResponse{
+			ID:          uint(dataset.ID),
+			Name:        dataset.Name,
+			Description: dataset.Description,
+			UserID:      uint(userId),
+			CreatedAt:   dataset.CreatedAt.Unix(),
+		})
+	}
+	//todo: 写入 redis
+	s.RedisClient.Set(ctx, fmt.Sprintf("datasets:user:%d", userId), resp, utils.ExpireDuration)
+	return resp, nil
+}
+
+func (s *Service) ListDatasetItems(datasetId int, userId int64, pageNum, pageSize int, ctx context.Context) ([]map[string]interface{}, error) {
+	var items []models.DatasetItem
+	if err := s.DB.Where("dataset_id = ? AND user_id = ? AND is_deleted = false", datasetId, userId).
+		Offset((pageNum - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
+		return nil, err
+	}
+	var resp []map[string]interface{}
+	for _, item := range items {
+		var content map[string]interface{}
+		if err := json.Unmarshal([]byte(item.RawContent), &content); err != nil {
+			log.Printf("Failed to unmarshal dataset item ID %d: %v", item.ID, err)
+			continue
+		}
+		content["id"] = item.ID
+		content["created_at"] = item.CreatedAt.Unix()
+		resp = append(resp, content)
+	}
+	return resp, nil
 }

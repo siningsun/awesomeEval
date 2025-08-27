@@ -85,7 +85,7 @@ func (h *UserHandler) Signup(c *gin.Context) {
 		return
 	}
 	// token写入 redis
-	h.Redis.Set(c.Request.Context(), fmt.Sprintf("user:token:%d", userDB.ID), tokenString, utils2.ExpireDuration)
+	h.Redis.Set(c.Request.Context(), tokenString, fmt.Sprintf("userID:%d", userDB.ID), utils2.ExpireDuration)
 	// 返回用户信息和令牌
 	userInfo := &models.UserInfo{
 		ID:        userDB.ID,

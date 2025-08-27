@@ -1,6 +1,8 @@
 package models
 
-import "awesomeEval/internal/utils"
+import (
+	"awesomeEval/internal/utils"
+)
 
 type DatasetDB struct {
 	utils.BaseModel
@@ -9,6 +11,15 @@ type DatasetDB struct {
 	UserID      uint   `json:"user_id" gorm:"column:user_id"`
 	FilePath    string `json:"file_path" gorm:"column:file_path"`
 	IsDeleted   bool   `json:"is_deleted" gorm:"column:is_deleted;default:false"`
+}
+
+type DatasetResponse struct {
+	ID          uint   `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	UserID      uint   `json:"user_id"`
+	FilePath    string `json:"file_path"`
+	CreatedAt   int64  `json:"created_at"`
 }
 type DatasetIOJob struct {
 	utils.BaseModel
@@ -26,6 +37,16 @@ type DatasetItem struct {
 	RawContent string `json:"raw_content" gorm:"column:raw_content;type:jsonb"`
 	UserID     uint   `json:"user_id" gorm:"column:user_id"`
 	IsDeleted  bool   `json:"is_deleted" gorm:"column:is_deleted;default:false"`
+}
+
+type DatasetItemResponse struct {
+	ID        uint `json:"id"`
+	DatasetID uint `json:"dataset_id"`
+	UserID    uint `json:"user_id"`
+	// parse RawContent to map
+	RawContent map[string]interface{} `json:"raw_content"`
+	Page       int                    `json:"page"`
+	PageSize   int                    `json:"page_size"`
 }
 
 type CreateDatasetRequest struct {

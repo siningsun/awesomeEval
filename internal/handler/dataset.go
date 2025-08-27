@@ -5,6 +5,7 @@ import (
 	"awesomeEval/internal/models"
 	"awesomeEval/internal/service/dataset"
 	"github.com/gin-gonic/gin"
+	"net/http"
 	"strconv"
 )
 
@@ -20,7 +21,8 @@ func NewDatasetHandler(service *dataset.Service) *DatasetHandler {
 
 func (h *DatasetHandler) CreateDataset(c *gin.Context) {
 	// obtain userID from token
-	user := c.GetString("userID")
+	userId, _ := c.Get("user_id")
+	user := userId.(string)
 	userID, err := strconv.Atoi(user)
 	if err != nil {
 		c.JSON(400, codes.CommonInvalidParamCode)
@@ -44,4 +46,55 @@ func (h *DatasetHandler) CreateDataset(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"message": "Dataset created successfully"})
+}
+
+func (h *DatasetHandler) ListDatasets(c *gin.Context) {
+	// obtain userID from token
+	userId, _ := c.Get("user_id")
+	user := userId.(string)
+	userID, err := strconv.Atoi(user)
+	if err != nil {
+		c.JSON(400, codes.CommonInvalidParamCode)
+		return
+	}
+	datasets, err := h.DatasetService.ListDatasets(int64(userID), c.Request.Context())
+	if err != nil {
+		c.JSON(500, codes.CommonInternalErrorCode)
+		return
+	}
+	c.JSON(200, gin.H{"datasets": datasets})
+}
+
+func (h *DatasetHandler) ListDatasetItems(c *gin.Context) {
+	// obtain dataset_id from query
+	datasetID, err := strconv.Atoi(c.Param("dataset_id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, codes.CommonInvalidParamCode)
+	}
+	// obtain user_id from context
+	user, _ := c.Get("user_id")
+	userIdStr := user.(string)
+	userId, err := strconv.Atoi(userIdStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, codes.CommonInvalidParamCode)
+	}
+	// obtain pageNum and pageSize
+	pageNumStr := c.Param("page")
+	pageSizeStr := c.Param("page_size")
+	pageNum_, err := strconv.Atoi(pageNumStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, codes.CommonInvalidParamCode)
+		return
+	}
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, codes.CommonInvalidParamCode)
+		return
+	}
+	result, err := h.DatasetService.ListDatasetItems(datasetID, int64(userId), pageNum_, pageSize, c.Request.Context())
+	if err != nil {
+		c.JSON(500, codes.CommonInternalErrorCode)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"datasetItems": result})
 }
