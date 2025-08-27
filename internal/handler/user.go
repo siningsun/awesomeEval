@@ -84,13 +84,26 @@ func (h *UserHandler) Signup(c *gin.Context) {
 		c.JSON(500, codes.NewByCode(codes.CommonInternalErrorCode, ""))
 		return
 	}
+	// token写入 redis
+	h.Redis.Set(c.Request.Context(), fmt.Sprintf("user:token:%d", userDB.ID), tokenString, utils2.ExpireDuration)
+	// 返回用户信息和令牌
+	userInfo := &models.UserInfo{
+		ID:        userDB.ID,
+		Email:     "",
+		AvatarUrl: "",
+		NickName:  "",
+	}
+	if userDB.Email != nil {
+		userInfo.Email = *userDB.Email
+	}
+	if userDB.AvatarUrl != nil {
+		userInfo.AvatarUrl = *userDB.AvatarUrl
+	}
+	if userDB.NickName != nil {
+		userInfo.NickName = *userDB.NickName
+	}
 	c.JSON(200, models.UserRegisterResponse{
-		UserInfo: &models.UserInfo{
-			ID:        userDB.ID,
-			Email:     *userDB.Email,
-			AvatarUrl: *userDB.AvatarUrl,
-			NickName:  *userDB.NickName,
-		},
+		UserInfo:   userInfo,
 		Token:      &tokenString,                                 // 这里可以生成 JWT 或其他类型的令牌
 		ExpireTime: time.Now().Add(utils2.ExpireDuration).Unix(), // 这里可以设置令牌的过期时间
 	})

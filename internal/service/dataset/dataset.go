@@ -2,6 +2,7 @@ package dataset
 
 import (
 	"awesomeEval/internal/models"
+	"awesomeEval/internal/utils"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -39,6 +40,7 @@ func (s *Service) CreateDataset(file multipart.File, header *multipart.FileHeade
 
 	// 创建 dataset 记录
 	datasetDB := &models.DatasetDB{
+		BaseModel:   utils.BaseModel{CreatedBy: userID},
 		Name:        request.Name,
 		Description: request.Description,
 		UserID:      uint(userID),
@@ -150,6 +152,7 @@ func (s *Service) CreateDataset(file multipart.File, header *multipart.FileHeade
 	return nil
 }
 
+// ProcessDatasetJob 处理异步任务 todo: 目前只实现了 import, 需要增加失败重试机制和进度条计算功能
 func (s *Service) ProcessDatasetJob(ctx context.Context, m *models.DatasetIOJob) error {
 	// 模拟处理时间
 	log.Printf("Processing dataset job ID %d of type %s", m.ID, m.JobType)
@@ -167,14 +170,18 @@ func (s *Service) ProcessDatasetJob(ctx context.Context, m *models.DatasetIOJob)
 		log.Printf("Unknown job type: %s", m.JobType)
 	}
 	// 更新 Job 状态为 completed
-	if err := s.DB.Model(&models.DatasetIOJob{}).Where("id = ?", m.ID).Updates(map[string]interface{}{
+	tx := s.DB.Session(&gorm.Session{}).Begin()
+	if err := tx.Model(&models.DatasetIOJob{}).Where("id = ?", m.ID).Updates(map[string]interface{}{
 		"status":     "completed",
 		"updated_at": gorm.Expr("NOW()"),
 	}).Error; err != nil {
 		log.Printf("Failed to update job status: %v", err)
+		tx.Rollback()
 		return err
 	}
-
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("Failed to commit job status update: %v", err)
+	}
 	log.Printf("Completed dataset job ID %d", m.ID)
 	return nil
 }

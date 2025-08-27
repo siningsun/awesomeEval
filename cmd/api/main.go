@@ -22,7 +22,7 @@ func init() {
 
 	// 初始化数据库连接
 	if err := config.InitializeConnections(cfg); err != nil {
-		log.Fatalf("初始化数据库连接失败: %v", err)
+		log.Fatalf("初始化连接失败: %v", err)
 	}
 }
 

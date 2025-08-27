@@ -8,9 +8,9 @@ type UserDB struct {
 	utils.BaseModel
 	Password  *string `gorm:"column:password;" json:"password"`
 	Email     *string `gorm:"column:email;" json:"email"`
-	AvatarUrl *string `gorm:"avatar_url" json:"avatar_url"`
-	NickName  *string `gorm:"nickname" json:"nickname"`
-	Mobile    *string `gorm:"mobile" json:"mobile"`
+	AvatarUrl *string `gorm:"column:avatar_url" json:"avatar_url"`
+	NickName  *string `gorm:"column:nickname" json:"nickname"`
+	Mobile    *string `gorm:"column:mobile" json:"mobile"`
 	IsDeleted bool    `gorm:"column:is_deleted;" json:"is_deleted"`
 }
 
@@ -66,4 +66,8 @@ type LoginByMobileResponse struct {
 
 type SendVerificationCodeRequest struct {
 	Mobile string `json:"mobile"`
+}
+
+func (*UserDB) TableName() string {
+	return "user"
 }
