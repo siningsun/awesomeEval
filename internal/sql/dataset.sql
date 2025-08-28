@@ -21,7 +21,7 @@ create table if not exists dataset_item (
     user_id integer not null,
     created_at timestamp with time zone default current_timestamp,
     updated_at timestamp with time zone default current_timestamp,
-    ctreated_by integer null,
+    created_by integer null,
     updated_by integer null,
     is_deleted boolean default false
 );

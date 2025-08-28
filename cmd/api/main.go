@@ -54,6 +54,8 @@ func main() {
 	authorized := router.Group("/", authHandler.AuthMiddleware())
 	{
 		authorized.POST("/dataset/create", datasetHandler.CreateDataset)
+		authorized.GET("/dataset/list", datasetHandler.ListDatasets)
+		authorized.GET("/dataset/view", datasetHandler.ListDatasetItems)
 	}
 
 	// 优雅关闭

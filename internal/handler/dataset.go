@@ -70,12 +70,28 @@ func (h *DatasetHandler) CreateDataset(c *gin.Context) {
 
 func (h *DatasetHandler) ListDatasets(c *gin.Context) {
 	// obtain userID from token
-	userId, _ := c.Get("user_id")
-	user := userId.(string)
-	userID, err := strconv.Atoi(user)
-	if err != nil {
-		c.JSON(400, codes.CommonInvalidParamCode)
-		return
+	var userID int
+	uid, _ := c.Get("user_id")
+	switch uid.(type) {
+	case int:
+		userID = uid.(int)
+	case int64:
+		userID = int(uid.(int64))
+	case string:
+		id, err := strconv.Atoi(uid.(string))
+		if err != nil {
+			c.JSON(500, codes.CommonInternalErrorCode)
+			return
+		}
+		userID = id
+	default:
+		userIdStr := fmt.Sprintf("%v", uid)
+		id, err := strconv.Atoi(userIdStr)
+		if err != nil {
+			c.JSON(500, codes.CommonInternalErrorCode)
+			return
+		}
+		userID = id
 	}
 	datasets, err := h.DatasetService.ListDatasets(int64(userID), c.Request.Context())
 	if err != nil {
@@ -87,31 +103,54 @@ func (h *DatasetHandler) ListDatasets(c *gin.Context) {
 
 func (h *DatasetHandler) ListDatasetItems(c *gin.Context) {
 	// obtain dataset_id from query
-	datasetID, err := strconv.Atoi(c.Param("dataset_id"))
+	datasetParam := c.Query("dataset_id")
+	datasetID, err := strconv.Atoi(datasetParam)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, codes.CommonInvalidParamCode)
+		c.JSON(400, codes.CommonInvalidParamCode)
+		return
 	}
 	// obtain user_id from context
-	user, _ := c.Get("user_id")
-	userIdStr := user.(string)
-	userId, err := strconv.Atoi(userIdStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, codes.CommonInvalidParamCode)
+	uid, ok := c.Get("user_id")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, codes.CommonUnauthorizedCode)
+		return
+	}
+	var userId int64
+	switch v := uid.(type) {
+	case int:
+		userId = int64(v)
+	case int64:
+		userId = v
+	case string:
+		id, err := strconv.Atoi(v)
+		if err != nil {
+			c.JSON(500, codes.CommonInternalErrorCode)
+			return
+		}
+		userId = int64(id)
+	default:
+		userIdStr := fmt.Sprintf("%v", uid)
+		id, err := strconv.Atoi(userIdStr)
+		if err != nil {
+			c.JSON(500, codes.CommonInternalErrorCode)
+			return
+		}
+		userId = int64(id)
 	}
 	// obtain pageNum and pageSize
-	pageNumStr := c.Param("page")
-	pageSizeStr := c.Param("page_size")
-	pageNum_, err := strconv.Atoi(pageNumStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, codes.CommonInvalidParamCode)
+	pageNumParam := c.Query("page_num")
+	pageNum, err := strconv.Atoi(pageNumParam)
+	if err != nil || pageNum <= 0 {
+		c.JSON(400, codes.CommonInvalidParamCode)
 		return
 	}
-	pageSize, err := strconv.Atoi(pageSizeStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, codes.CommonInvalidParamCode)
+	pageSizeParam := c.Query("page_size")
+	pageSize, err := strconv.Atoi(pageSizeParam)
+	if err != nil || pageSize <= 0 {
+		c.JSON(400, codes.CommonInvalidParamCode)
 		return
 	}
-	result, err := h.DatasetService.ListDatasetItems(datasetID, int64(userId), pageNum_, pageSize, c.Request.Context())
+	result, err := h.DatasetService.ListDatasetItems(datasetID, int64(userId), pageNum, pageSize)
 	if err != nil {
 		c.JSON(500, codes.CommonInternalErrorCode)
 		return

@@ -317,7 +317,7 @@ func (s *Service) ValidateJsonKeys(object *minio.Object) (bool, int, map[string]
 
 func (s *Service) ListDatasets(userId int64, ctx context.Context) ([]models.DatasetResponse, error) {
 	var datasets []models.DatasetDB
-	if err := s.DB.Where("user_id = ? AND is_deleted = false", userId).Find(&datasets).Error; err != nil {
+	if err := s.DB.Where("user_id = ? AND is_deleted = false And is_valid = true", userId).Find(&datasets).Error; err != nil {
 		return nil, err
 	}
 	var resp []models.DatasetResponse
@@ -327,6 +327,7 @@ func (s *Service) ListDatasets(userId int64, ctx context.Context) ([]models.Data
 			Name:        dataset.Name,
 			Description: dataset.Description,
 			UserID:      uint(userId),
+			FilePath:    dataset.FilePath,
 			CreatedAt:   dataset.CreatedAt.Unix(),
 		})
 	}
@@ -335,7 +336,7 @@ func (s *Service) ListDatasets(userId int64, ctx context.Context) ([]models.Data
 	return resp, nil
 }
 
-func (s *Service) ListDatasetItems(datasetId int, userId int64, pageNum, pageSize int, ctx context.Context) ([]map[string]interface{}, error) {
+func (s *Service) ListDatasetItems(datasetId int, userId int64, pageNum, pageSize int) ([]map[string]interface{}, error) {
 	var items []models.DatasetItem
 	if err := s.DB.Where("dataset_id = ? AND user_id = ? AND is_deleted = false", datasetId, userId).
 		Offset((pageNum - 1) * pageSize).Limit(pageSize).Find(&items).Error; err != nil {
