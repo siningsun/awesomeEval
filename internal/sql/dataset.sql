@@ -10,6 +10,8 @@ create table if not exists dataset_metadata (
     is_deleted boolean default false
 );
 create index idx_id_name on dataset_metadata (id, "name");
+alter table dataset_metadata add column dataset_keys jsonb null;
+alter table dataset_metadata add column is_valid boolean default false;
 
 create table if not exists dataset_item (
     id serial primary key,
@@ -28,7 +30,7 @@ create table if not exisits dataset_io_jobs (
     id serial primary key,
     dataset_id integer not null,
     job_type text not null,
-    status text not null,
+    status text not null, -- pending, in_progress, completed, failed, default pending
     created_at timestamp with time zone default current_timestamp,
     updated_at timestamp with time zone default current_timestamp,
     created_by integer null,

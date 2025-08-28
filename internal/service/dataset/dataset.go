@@ -165,6 +165,7 @@ func (s *Service) ProcessDatasetJob(ctx context.Context, m *models.DatasetIOJob)
 		log.Printf("Importing dataset ID %d", m.DatasetID)
 		err := s.RunInsertDatasetItemsJob(m)
 		if err != nil {
+			log.Printf("Failed to import dataset ID %d: %v", m.DatasetID, err)
 			return err
 		}
 	case "export":
@@ -201,7 +202,27 @@ func (s *Service) RunInsertDatasetItemsJob(job *models.DatasetIOJob) error {
 		return err
 	}
 	defer object.Close()
-
+	// validate JSON keys
+	isValid, errLine, keys, err := s.ValidateJsonKeys(object)
+	if err != nil || !isValid {
+		log.Printf("Dataset validation failed at line %d: %v", errLine, err)
+		isValid = false
+		return fmt.Errorf("dataset validation failed at line %d: %v", errLine, err)
+	}
+	log.Printf("Dataset JSON keys: %v", keys)
+	// update valid status to dataset_metadata
+	tx := s.DB.Session(&gorm.Session{}).Begin()
+	if err := tx.Model(&models.DatasetDB{}).Where("id = ?", job.DatasetID).Updates(map[string]interface{}{
+		"is_valid":   isValid,
+		"data_keys":  keys,
+		"updated_at": gorm.Expr("NOW()"),
+	}).Error; err != nil {
+		tx.Rollback()
+		log.Printf("Failed to update dataset valid status: %v", err)
+	}
+	if err := tx.Commit().Error; err != nil {
+		log.Printf("Failed to commit dataset valid status update: %v", err)
+	}
 	// 读取数据集，jsonl格式, 每行一个 JSON 对象
 	var items []models.DatasetItem
 	scanner := bufio.NewScanner(object)
@@ -222,7 +243,7 @@ func (s *Service) RunInsertDatasetItemsJob(job *models.DatasetIOJob) error {
 	}
 
 	// 批量插入数据项
-	tx := s.DB.Begin()
+	tx = s.DB.Begin()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
@@ -248,6 +269,43 @@ func (s *Service) RunInsertDatasetItemsJob(job *models.DatasetIOJob) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Service) ValidateJsonKeys(object *minio.Object) (bool, int, map[string]struct{}, error) {
+	scanner := bufio.NewScanner(object)
+	var keys map[string]struct{}
+	lineCount := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			var obj map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &obj); err != nil {
+				log.Printf("Invalid JSON line: %v", err)
+				return false, lineCount, nil, fmt.Errorf("invalid JSON format")
+			}
+			if keys == nil {
+				keys = make(map[string]struct{})
+				for k := range obj {
+					keys[k] = struct{}{}
+				}
+			} else {
+				if len(keys) != len(obj) {
+					return false, lineCount, nil, fmt.Errorf("inconsistent JSON keys")
+				}
+				for k := range obj {
+					if _, exists := keys[k]; !exists {
+						return false, lineCount, nil, fmt.Errorf("inconsistent JSON keys")
+					}
+				}
+			}
+			lineCount++
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading from object: %v", err)
+		return false, lineCount, nil, err
+	}
+	return true, lineCount, keys, nil
 }
 
 func (s *Service) ListDatasets(userId int64, ctx context.Context) ([]models.DatasetResponse, error) {
