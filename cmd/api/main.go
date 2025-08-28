@@ -41,13 +41,20 @@ func main() {
 	// New UserHandler
 	userHandler := handler.NewUserHandler(config.GlobalConnections.PostgreSQL, config.GlobalConnections.Redis, &sms.MockSmsService{})
 	// New DatasetHandler
-	datasetHandler := handler.NewDatasetHandler(&dataset.Service{DB: config.GlobalConnections.PostgreSQL, Conn: config.GlobalConnections.RabbitMQ})
+	datasetHandler := handler.NewDatasetHandler(&dataset.Service{
+		DB:          config.GlobalConnections.PostgreSQL,
+		Conn:        config.GlobalConnections.RabbitMQ,
+		RedisClient: config.GlobalConnections.Redis,
+		MinioClient: config.GlobalConnections.Minio,
+	})
 	router.POST("/signup", userHandler.Signup)
 	router.POST("/loginByPassword", userHandler.LoginByPassword)
 	router.POST("/loginByCode", userHandler.LoginByMobile)
 
-	authorized := router.Use(authHandler.AuthMiddleware())
-	authorized.POST("/dataset/create", datasetHandler.CreateDataset)
+	authorized := router.Group("/", authHandler.AuthMiddleware())
+	{
+		authorized.POST("/dataset/create", datasetHandler.CreateDataset)
+	}
 
 	// 优雅关闭
 	go func() {

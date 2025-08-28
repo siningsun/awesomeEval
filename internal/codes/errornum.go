@@ -7,6 +7,7 @@ const (
 	UserAlreadyExistsCode   = 2001
 	UserNotFoundCode        = 2002
 	PasswordMismatchCode    = 2003
+	CommonUnauthorizedCode  = 3001
 )
 
 var DefaultMessages = map[int]map[string]string{
@@ -33,6 +34,10 @@ var DefaultMessages = map[int]map[string]string{
 	PasswordMismatchCode: {
 		"en": "Password mismatch",
 		"cn": "密码不匹配",
+	},
+	CommonUnauthorizedCode: {
+		"en": "Unauthorized",
+		"cn": "未授权",
 	},
 }
 

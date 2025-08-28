@@ -1,4 +1,4 @@
-package worker
+package main
 
 import (
 	"awesomeEval/config"
@@ -19,7 +19,7 @@ func init() {
 	if err := config.InitializeConnections(cfg); err != nil {
 		log.Fatalf("初始化连接失败: %v", err)
 	}
-	worker = mq.NewDatasetWorker(config.GetRabbitMQ(), config.GetPostgreSQL(), config.GetMinio())
+	worker = mq.NewDatasetWorker(config.GetRabbitMQ(), config.GetPostgreSQL(), config.GetMinio(), config.GetRedis())
 }
 
 func main() {

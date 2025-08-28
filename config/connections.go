@@ -39,9 +39,13 @@ func InitializeConnections(cfg *Config) error {
 	if err := conns.initRabbitMQ(cfg.RabbitMQ); err != nil {
 		return fmt.Errorf("初始化RabbitMQ失败: %w", err)
 	}
+	// 初始化Minio连接
+	if err := conns.initMinio(cfg.Minio); err != nil {
+		return fmt.Errorf("初始化Minio失败: %w", err)
+	}
 
 	GlobalConnections = conns
-	log.Println("所有数据库连接初始化成功")
+	log.Println("所有连接初始化成功")
 	return nil
 }
 

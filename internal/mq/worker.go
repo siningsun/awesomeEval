@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/minio/minio-go/v7"
+	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
 	"gorm.io/gorm"
 	"log"
@@ -18,12 +19,12 @@ type DatasetWorker struct {
 	Service     *dataset.Service
 }
 
-func NewDatasetWorker(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Client) *DatasetWorker {
+func NewDatasetWorker(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Client, redisClient *redis.Client) *DatasetWorker {
 	return &DatasetWorker{
 		DB:          db,
 		MinioClient: minioClient,
 		Conn:        conn,
-		Service:     dataset.NewService(conn, db, minioClient),
+		Service:     dataset.NewService(conn, db, minioClient, redisClient),
 	}
 }
 

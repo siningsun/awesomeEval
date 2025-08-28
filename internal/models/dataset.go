@@ -55,13 +55,13 @@ type CreateDatasetRequest struct {
 }
 
 func (*DatasetDB) TableName() string {
-	return "datasets_metadata"
+	return "dataset_metadata"
 }
 
 func (*DatasetIOJob) TableName() string {
-	return "datasets_io_jobs"
+	return "dataset_io_jobs"
 }
 
 func (*DatasetItem) TableName() string {
-	return "datasets_item"
+	return "dataset_item"
 }

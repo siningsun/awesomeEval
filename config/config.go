@@ -12,6 +12,7 @@ type Config struct {
 	PostgreSQL PostgreSQLConfig `mapstructure:"postgresql"`
 	Redis      RedisConfig      `mapstructure:"redis"`
 	RabbitMQ   RabbitMQConfig   `mapstructure:"rabbitmq"`
+	Minio      MinioConfig      `mapstructure:"minio"`
 }
 
 type PostgreSQLConfig struct {

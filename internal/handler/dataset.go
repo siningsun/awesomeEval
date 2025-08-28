@@ -4,6 +4,7 @@ import (
 	"awesomeEval/internal/codes"
 	"awesomeEval/internal/models"
 	"awesomeEval/internal/service/dataset"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
@@ -20,31 +21,50 @@ func NewDatasetHandler(service *dataset.Service) *DatasetHandler {
 }
 
 func (h *DatasetHandler) CreateDataset(c *gin.Context) {
-	// obtain userID from token
-	userId, _ := c.Get("user_id")
-	user := userId.(string)
-	userID, err := strconv.Atoi(user)
-	if err != nil {
-		c.JSON(400, codes.CommonInvalidParamCode)
+	uid, ok := c.Get("user_id")
+	if !ok {
+		c.JSON(401, gin.H{"code": codes.CommonUnauthorizedCode, "message": "user_id missing"})
 		return
 	}
+	var userID int
+	switch v := uid.(type) {
+	case int:
+		userID = v
+	case int64:
+		userID = int(v)
+	case string:
+		id, err := strconv.Atoi(v)
+		if err != nil {
+			c.JSON(500, gin.H{"code": codes.CommonInternalErrorCode, "message": "user_id type error"})
+			return
+		}
+		userID = id
+	default:
+		userIdStr := fmt.Sprintf("%v", uid)
+		id, err := strconv.Atoi(userIdStr)
+		if err != nil {
+			c.JSON(500, gin.H{"code": codes.CommonInternalErrorCode, "message": "user_id type error"})
+			return
+		}
+		userID = id
+	}
+
 	var createDatasetRequest models.CreateDatasetRequest
-	if err := c.ShouldBindJSON(&createDatasetRequest); err != nil {
-		c.JSON(400, codes.CommonInvalidParamCode)
-		return
-	}
-	// obtain file from form
+	createDatasetRequest.Name = c.PostForm("name")
+	createDatasetRequest.Description = c.PostForm("description")
+
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		c.JSON(400, codes.CommonInvalidParamCode)
+		c.JSON(400, gin.H{"code": codes.CommonInvalidParamCode, "message": "file missing"})
 		return
 	}
 	defer file.Close()
-	err = h.DatasetService.CreateDataset(file, header, &createDatasetRequest, int64(userID), c.Request.Context())
-	if err != nil {
-		c.JSON(500, codes.CommonInternalErrorCode)
+
+	if err := h.DatasetService.CreateDataset(file, header, &createDatasetRequest, int64(userID), c.Request.Context()); err != nil {
+		c.JSON(500, gin.H{"code": codes.CommonInternalErrorCode, "message": err.Error()})
 		return
 	}
+
 	c.JSON(200, gin.H{"message": "Dataset created successfully"})
 }
 

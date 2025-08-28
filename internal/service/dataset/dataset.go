@@ -64,7 +64,7 @@ func (s *Service) CreateDataset(file multipart.File, header *multipart.FileHeade
 	found, err := s.MinioClient.BucketExists(ctx, bucketName)
 	if err != nil {
 		tx.Rollback()
-		log.Printf("MinIO bucket check error: %v", err)
+		fmt.Printf("MinIO bucket check error: %v", err)
 		return err
 	}
 	if !found {
@@ -213,9 +213,9 @@ func (s *Service) RunInsertDatasetItemsJob(job *models.DatasetIOJob) error {
 	// update valid status to dataset_metadata
 	tx := s.DB.Session(&gorm.Session{}).Begin()
 	if err := tx.Model(&models.DatasetDB{}).Where("id = ?", job.DatasetID).Updates(map[string]interface{}{
-		"is_valid":   isValid,
-		"data_keys":  keys,
-		"updated_at": gorm.Expr("NOW()"),
+		"is_valid":     isValid,
+		"dataset_keys": keys,
+		"updated_at":   gorm.Expr("NOW()"),
 	}).Error; err != nil {
 		tx.Rollback()
 		log.Printf("Failed to update dataset valid status: %v", err)
@@ -224,6 +224,13 @@ func (s *Service) RunInsertDatasetItemsJob(job *models.DatasetIOJob) error {
 		log.Printf("Failed to commit dataset valid status update: %v", err)
 	}
 	// 读取数据集，jsonl格式, 每行一个 JSON 对象
+	// 重新打开对象，因为上面的扫描已经读完了
+	object, err = s.MinioClient.GetObject(context.Background(), bucketName, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		log.Printf("MinIO get object error: %v", err)
+		return err
+	}
+	// 逐行读取文件内容
 	var items []models.DatasetItem
 	scanner := bufio.NewScanner(object)
 	for scanner.Scan() {
