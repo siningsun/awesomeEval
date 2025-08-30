@@ -20,7 +20,7 @@ type Service struct {
 	RedisClient *redis.Client
 }
 
-func NewEvalHandler(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Client, redisClient *redis.Client) *Service {
+func NewEvalService(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Client, redisClient *redis.Client) *Service {
 	return &Service{
 		Conn:        conn,
 		DB:          db,
@@ -73,7 +73,7 @@ func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *model
 	defer channel.Close()
 	// 声明队列
 	_, err = channel.QueueDeclare(
-		"eval_task_jobs",
+		"eval_jobs",
 		true,  // durable
 		false, // autoDelete
 		false, // exclusive

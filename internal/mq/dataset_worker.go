@@ -13,23 +13,17 @@ import (
 )
 
 type DatasetWorker struct {
-	DB          *gorm.DB
-	MinioClient *minio.Client
-	Conn        *amqp.Connection
-	Service     *dataset.Service
+	Service *dataset.Service
 }
 
 func NewDatasetWorker(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Client, redisClient *redis.Client) *DatasetWorker {
 	return &DatasetWorker{
-		DB:          db,
-		MinioClient: minioClient,
-		Conn:        conn,
-		Service:     dataset.NewService(conn, db, minioClient, redisClient),
+		Service: dataset.NewService(conn, db, minioClient, redisClient),
 	}
 }
 
 func (w *DatasetWorker) Start(ctx context.Context) error {
-	channel, err := w.Conn.Channel()
+	channel, err := w.Service.Conn.Channel()
 	if err != nil {
 		return err
 	}
@@ -85,7 +79,7 @@ func (w *DatasetWorker) handleMessage(ctx context.Context, msg amqp.Delivery) er
 	}
 	// 从数据库中加载完整 Job（包括最新状态）
 	var job models.DatasetIOJob
-	if err := w.DB.First(&job, jobMsg.ID).Error; err != nil {
+	if err := w.Service.DB.First(&job, jobMsg.ID).Error; err != nil {
 		log.Printf("⚠️ DB fetch job error: %v", err)
 		return err
 	}

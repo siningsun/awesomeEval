@@ -52,3 +52,7 @@ func (h *EvalHandler) CreateBatchEvalJob(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{"message": "eval batch job created successfully!"})
 }
+
+func (h *EvalHandler) PreviewEval(c *gin.Context) {
+
+}

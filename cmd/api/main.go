@@ -3,6 +3,7 @@ package main
 import (
 	"awesomeEval/internal/handler"
 	"awesomeEval/internal/service/dataset"
+	"awesomeEval/internal/service/eval"
 	"awesomeEval/internal/service/sms"
 	"awesomeEval/middleware"
 	"log"
@@ -39,11 +40,21 @@ func main() {
 	// New AuthHandler
 	authHandler := middleware.NewAuthHandler(config.GlobalConnections.Redis)
 	// New UserHandler
-	userHandler := handler.NewUserHandler(config.GlobalConnections.PostgreSQL, config.GlobalConnections.Redis, &sms.MockSmsService{})
+	userHandler := handler.NewUserHandler(
+		config.GlobalConnections.PostgreSQL,
+		config.GlobalConnections.Redis,
+		&sms.MockSmsService{})
 	// New DatasetHandler
 	datasetHandler := handler.NewDatasetHandler(&dataset.Service{
 		DB:          config.GlobalConnections.PostgreSQL,
 		Conn:        config.GlobalConnections.RabbitMQ,
+		RedisClient: config.GlobalConnections.Redis,
+		MinioClient: config.GlobalConnections.Minio,
+	})
+	// New EvalHandler
+	evalHandler := handler.NewEvalHandler(&eval.Service{
+		Conn:        config.GlobalConnections.RabbitMQ,
+		DB:          config.GlobalConnections.PostgreSQL,
 		RedisClient: config.GlobalConnections.Redis,
 		MinioClient: config.GlobalConnections.Minio,
 	})
@@ -56,6 +67,8 @@ func main() {
 		authorized.POST("/dataset/create", datasetHandler.CreateDataset)
 		authorized.GET("/dataset/list", datasetHandler.ListDatasets)
 		authorized.GET("/dataset/view", datasetHandler.ListDatasetItems)
+		authorized.POST("/eval/task/create", evalHandler.CreateBatchEvalJob)
+		authorized.POST("/eval/preview", evalHandler.PreviewEval)
 	}
 
 	// 优雅关闭
