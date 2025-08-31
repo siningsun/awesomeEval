@@ -1,8 +1,10 @@
 package mq
 
 import (
+	"awesomeEval/internal/models"
 	"awesomeEval/internal/service/eval"
 	"context"
+	"encoding/json"
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
@@ -69,6 +71,20 @@ func (w *EvalWorker) Start(ctx context.Context) error {
 }
 
 func (w *EvalWorker) handleMessage(ctx context.Context, msg amqp.Delivery) error {
-
+	var evalTask models.EvalBatchTask
+	if err := json.Unmarshal(msg.Body, &evalTask); err != nil {
+		log.Printf("Unmarshal error: %v", err)
+		return err
+	}
+	var evalTaskDB models.EvalBatchTask
+	if err := w.Service.DB.Model(models.EvalBatchTask{}).Where("task_uuid = ?", evalTask.TaskUuid).First(&evalTaskDB).Error; err != nil {
+		log.Printf("Query error: %v", err)
+		return err
+	}
+	err := w.Service.RunEvalTask(ctx, &evalTask)
+	if err != nil {
+		log.Printf("RunEvalTask error: %v", err)
+		return err
+	}
 	return nil
 }

@@ -9,7 +9,6 @@ create table eval_batch_tasks (
     candidate_system_prompt text null,
     candidate_user_prompt text null,
     judge_system_prompt text null,
-    judge_user_prompt text null,
     model_config_A jsonb null,
     model_config_B jsonb null,
     model_config_judge jsonb null,

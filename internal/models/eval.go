@@ -1,13 +1,15 @@
 package models
 
+import "github.com/cloudwego/eino/schema"
+
 type ModelConfig struct {
-	ModelType   int     `json:"model_type"` // local or remote
-	Model       string  `json:"model"`
-	APIKey      string  `json:"api_key"`
-	BaseURL     string  `json:"base_url"`
-	TopP        float64 `json:"top_p"`
-	Temperature float64 `json:"temperature"`
-	MaxTokens   int     `json:"max_tokens"`
+	ModelType   int      `json:"model_type"` // local or remote
+	Model       string   `json:"model"`
+	APIKey      string   `json:"api_key"`
+	BaseURL     string   `json:"base_url"`
+	TopP        *float32 `json:"top_p"`
+	Temperature *float32 `json:"temperature"`
+	MaxTokens   *int     `json:"max_tokens"`
 }
 
 type EvalBatchTaskRequest struct {
@@ -20,11 +22,10 @@ type EvalBatchTaskRequest struct {
 	CandidateSystemPrompt string      `json:"candidate_system_prompt"`
 	CandidateUserPrompt   string      `json:"candidate_user_prompt"`
 	JudgeSystemPrompt     string      `json:"judge_system_prompt"`
-	JudgeUserPrompt       string      `json:"judge_user_prompt"`
 	DatasetItem           int         `json:"dataset_item"`
 }
 
-type EvalBatchTaskDB struct {
+type EvalBatchTask struct {
 	DatasetId             int         `json:"dataset_id" gorm:"column:dataset_id"`
 	UserId                int         `json:"user_id" gorm:"column:user_id"`
 	Status                string      `json:"status" gorm:"column:status"`
@@ -34,13 +35,24 @@ type EvalBatchTaskDB struct {
 	CandidateSystemPrompt *string     `json:"candidate_system_prompt" gorm:"column:candidate_system_prompt"`
 	CandidateUserPrompt   *string     `json:"candidate_user_prompt" gorm:"column:candidate_user_prompt"`
 	JudgeSystemPrompt     *string     `json:"judge_system_prompt" gorm:"column:judge_system_prompt"`
-	JudgeUserPrompt       *string     `json:"judge_user_prompt" gorm:"column:judge_user_prompt"`
 	ModelA                ModelConfig `json:"model_a" gorm:"column:model_a"`
 	ModelB                ModelConfig `json:"model_b" gorm:"model_b"`
 	ModelJudge            ModelConfig `json:"model_judge" gorm:"model_judge"`
 	DatasetItem           int         `json:"dataset_item" gorm:"dataset_item"`
 }
 
-func (*EvalBatchTaskDB) TableName() string {
+type Sample struct {
+	ID     int               `json:"id"`
+	Prompt []*schema.Message `json:"prompt"`
+}
+
+type ModelResult struct {
+	AnswerA string
+	AnswerB string
+	Judge   string
+	Error   error
+}
+
+func (*EvalBatchTask) TableName() string {
 	return "eval_batch_tasks"
 }
