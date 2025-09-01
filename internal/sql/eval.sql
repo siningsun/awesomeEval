@@ -27,12 +27,12 @@ create table eval_task_results (
     task_uuid integer not null ,
     dataset_id integer not null,
     user_id integer not null,
-    system_prompt_A text null,
-    user_prompt_A text null,
-    system_prompt_B text null,
-    user_prompt_B text null,
+    candidate_system_prompt text null,
+    candidate_user_prompt text null,
     response_A text null,
     response_B text null,
+    judge_system_prompt text null,
+    judge_user_prompt text null,
     judge_response text null,
     task_type integer not null,
     created_at timestamp with time zone default current_timestamp,
@@ -42,3 +42,4 @@ create table eval_task_results (
     is_deleted boolean default false
 )
 create index idx_task_uuid_dataset_id on eval_task_results(task_uuid, dataset_id)
+alter table eval_task_results alter task_uuid type varchar(128)

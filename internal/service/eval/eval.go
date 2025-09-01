@@ -158,7 +158,32 @@ func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) er
 		results = append(results, res)
 	}
 	// save to Db
-
+	var evalResults []*models.EvalTaskResult
+	for _, result := range results {
+		evalResults = append(evalResults, &models.EvalTaskResult{
+			TaskUuid:              &job.TaskUuid,
+			DatasetId:             job.DatasetId,
+			UserId:                job.UserId,
+			DatasetItemId:         result.ID,
+			ResponseA:             &result.AnswerA,
+			ResponseB:             &result.AnswerB,
+			JudgeResponse:         &result.Judge,
+			TaskType:              job.TaskType,
+			CandidateSystemPrompt: &result.CandidateSystemPrompt,
+			CandidateUserPrompt:   &result.CandidateUserPrompt,
+			JudgeSystemPrompt:     &result.JudgeSystemPrompt,
+			JudgeUserPrompt:       &result.JudgeUserPrompt,
+		})
+	}
+	tx := s.DB.Session(&gorm.Session{}).Begin()
+	if err := s.DB.Model(models.EvalBatchTask{}).Create(evalResults); err != nil {
+		fmt.Printf("CreateBatchTask error: %v", err)
+		tx.Rollback()
+	}
+	if err := tx.Commit().Error; err != nil {
+		fmt.Printf("Commit error: %v", err)
+		tx.Rollback()
+	}
 	return nil
 }
 
@@ -233,9 +258,14 @@ func (s *Service) ProcessSample(ctx context.Context, sample models.Sample, req *
 	}
 
 	return models.ModelResult{
-		AnswerA: answerA.Content,
-		AnswerB: answerB.Content,
-		Judge:   judgeAnswer.Content,
+		ID:                    sample.ID,
+		AnswerA:               answerA.Content,
+		AnswerB:               answerB.Content,
+		Judge:                 judgeAnswer.Content,
+		CandidateSystemPrompt: sample.Prompt[0].Content,
+		CandidateUserPrompt:   sample.Prompt[1].Content,
+		JudgeSystemPrompt:     *req.JudgeSystemPrompt,
+		JudgeUserPrompt:       judgePrompt[1].Content,
 	}
 }
 
@@ -264,6 +294,7 @@ func (s *Service) GenerateJudgePrompt(sysPrompt string, sample *models.Sample, a
 	builder.WriteString("\n")
 	builder.WriteString("response from model B:")
 	builder.WriteString(answerB.Content)
+	builder.WriteString("\n")
 	return []*schema.Message{
 		{
 			Role:    "System",

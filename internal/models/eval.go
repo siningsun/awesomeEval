@@ -1,6 +1,9 @@
 package models
 
-import "github.com/cloudwego/eino/schema"
+import (
+	"awesomeEval/internal/utils"
+	"github.com/cloudwego/eino/schema"
+)
 
 type ModelConfig struct {
 	ModelType   int      `json:"model_type"` // local or remote
@@ -26,6 +29,7 @@ type EvalBatchTaskRequest struct {
 }
 
 type EvalBatchTask struct {
+	utils.BaseModel
 	DatasetId             int         `json:"dataset_id" gorm:"column:dataset_id"`
 	UserId                int         `json:"user_id" gorm:"column:user_id"`
 	Status                string      `json:"status" gorm:"column:status"`
@@ -39,6 +43,23 @@ type EvalBatchTask struct {
 	ModelB                ModelConfig `json:"model_b" gorm:"model_b"`
 	ModelJudge            ModelConfig `json:"model_judge" gorm:"model_judge"`
 	DatasetItem           int         `json:"dataset_item" gorm:"dataset_item"`
+	IsDeleted             bool        `json:"is_deleted" gorm:"column:is_deleted"`
+}
+
+type EvalTaskResult struct {
+	DatasetItemId         int     `json:"dataset_item_id" gorm:"column:dataset_item_id"`
+	TaskUuid              *string `json:"task_uuid" gorm:"column:task_uuid"`
+	DatasetId             int     `json:"dataset_id" gorm:"column:dataset_id"`
+	UserId                int     `json:"user_id" gorm:"column:user_id"`
+	CandidateSystemPrompt *string `json:"candidate_system_prompt" gorm:"column:candidate_system_prompt"`
+	CandidateUserPrompt   *string `json:"candidate_user_prompt" gorm:"column:candidate_user_prompt"`
+	JudgeSystemPrompt     *string `json:"judge_system_prompt" gorm:"column:judge_system_prompt"`
+	JudgeUserPrompt       *string `json:"judge_user_prompt" gorm:"column:judge_user_prompt"`
+	TaskType              int     `json:"task_type" gorm:"column:task_type"`
+	ResponseA             *string `json:"response_a" gorm:"column:response_a"`
+	ResponseB             *string `json:"response_b" gorm:"column:response_b"`
+	JudgeResponse         *string `json:"judge_response" gorm:"column:judge_response"`
+	IsDeleted             bool    `json:"is_deleted" gorm:"column:is_deleted"`
 }
 
 type Sample struct {
@@ -47,12 +68,21 @@ type Sample struct {
 }
 
 type ModelResult struct {
-	AnswerA string
-	AnswerB string
-	Judge   string
-	Error   error
+	ID                    int
+	AnswerA               string
+	AnswerB               string
+	Judge                 string
+	Error                 error
+	CandidateSystemPrompt string
+	CandidateUserPrompt   string
+	JudgeSystemPrompt     string
+	JudgeUserPrompt       string
 }
 
 func (*EvalBatchTask) TableName() string {
 	return "eval_batch_tasks"
+}
+
+func (*EvalTaskResult) TableName() string {
+	return "eval_task_results"
 }
