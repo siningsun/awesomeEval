@@ -82,6 +82,12 @@ type ModelResult struct {
 	JudgeUserPrompt       string
 }
 
+type SSEMessage struct {
+	Type            string `json:"type"`
+	Content         string `json:"content"`
+	FinishingReason bool   `json:"finishing_reason"`
+}
+
 func (*EvalBatchTask) TableName() string {
 	return "eval_batch_tasks"
 }

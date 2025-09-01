@@ -385,21 +385,53 @@ func (s *Service) ResponseStreamSSE(sr *schema.StreamReader[*schema.Message], w 
 	for {
 		message, err := sr.Recv()
 		if err == io.EOF {
+			// 最后 flush 一次
+			endMessage := models.SSEMessage{
+				Type:            "end",
+				Content:         "",
+				FinishingReason: true,
+			}
+			jsonBytes, err := json.Marshal(endMessage)
+			if err != nil {
+				log.Printf("json marshal failed: %v", err)
+				return nil, err
+			}
+			// SSE 格式发送
+			msg := fmt.Sprintf("data: %s\n\n", string(jsonBytes))
+			_, err = w.Write([]byte(msg))
+			if err != nil {
+				return nil, err
+			}
+			flusher.Flush()
 			break
 		}
 		if err != nil {
 			log.Printf("recv failed: %v", err)
 			return nil, err
 		}
-		msg := fmt.Sprintf("data: %s\n\n", message.Content)
+
+		// 包装成结构体
+		sseMsg := models.SSEMessage{
+			Type:            "update", // 可以根据业务动态设置
+			Content:         message.Content,
+			FinishingReason: false,
+		}
+
+		// 转为 JSON
+		jsonBytes, err := json.Marshal(sseMsg)
+		if err != nil {
+			log.Printf("json marshal failed: %v", err)
+			return nil, err
+		}
+
+		// SSE 格式发送
+		msg := fmt.Sprintf("data: %s\n\n", string(jsonBytes))
 		_, err = w.Write([]byte(msg))
 		if err != nil {
 			return nil, err
 		}
 
-		// 立即刷新到客户端
 		flusher.Flush()
-
 		content.WriteString(message.Content)
 		i++
 	}
