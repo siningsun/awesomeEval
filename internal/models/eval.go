@@ -25,9 +25,9 @@ type EvalBatchTaskRequest struct {
 	ModelB                ModelConfig `json:"model_b"`
 	ModelJudge            ModelConfig `json:"model_judge"`
 	DatasetId             int         `json:"dataset_id"`
-	CandidateSystemPrompt string      `json:"candidate_system_prompt"`
-	CandidateUserPrompt   string      `json:"candidate_user_prompt"`
-	JudgeSystemPrompt     string      `json:"judge_system_prompt"`
+	CandidateSystemPrompt *string     `json:"candidate_system_prompt"`
+	CandidateUserPrompt   *string     `json:"candidate_user_prompt"`
+	JudgeSystemPrompt     *string     `json:"judge_system_prompt"`
 	DatasetItem           int         `json:"dataset_item"`
 }
 

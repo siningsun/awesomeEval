@@ -13,7 +13,9 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
 	"gorm.io/gorm"
+	"io"
 	"log"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
@@ -52,9 +54,9 @@ func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *model
 		TaskType:              req.EvalTaskType,
 		Name:                  req.Name,
 		TaskUuid:              taskUuid,
-		CandidateSystemPrompt: &req.CandidateSystemPrompt,
-		CandidateUserPrompt:   &req.CandidateUserPrompt,
-		JudgeSystemPrompt:     &req.JudgeSystemPrompt,
+		CandidateSystemPrompt: req.CandidateSystemPrompt,
+		CandidateUserPrompt:   req.CandidateUserPrompt,
+		JudgeSystemPrompt:     req.JudgeSystemPrompt,
 		ModelA:                req.ModelA,
 		ModelB:                req.ModelB,
 		ModelJudge:            req.ModelJudge,
@@ -110,9 +112,16 @@ func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *model
 	return nil
 }
 
-func (s *Service) PreviewEval(ctx context.Context) error {
-
-	return nil
+func (s *Service) PreviewEval(w http.ResponseWriter, ctx context.Context, req *models.EvalBatchTaskRequest) {
+	samples, err := s.GetInputMessages(req.DatasetItem, req.DatasetId, *req.CandidateSystemPrompt, *req.CandidateUserPrompt)
+	if err != nil {
+		fmt.Printf("error during processing prompt, err: %v", err)
+		return
+	}
+	for _, sample := range samples {
+		s.ProcessSampleStream(w, ctx, sample, req)
+	}
+	return
 }
 
 // RunEvalTask 并发处理
@@ -313,4 +322,91 @@ func (s *Service) GenerateJudgePrompt(sysPrompt string, sample *models.Sample, a
 			Content: builder.String(),
 		},
 	}
+}
+
+func (s *Service) CallModelStream(ctx context.Context, in []*schema.Message, config *models.ModelConfig) (out *schema.StreamReader[*schema.Message], err error) {
+	chatModel, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
+		APIKey:      config.APIKey,
+		BaseURL:     config.BaseURL,
+		Model:       config.Model,
+		MaxTokens:   config.MaxTokens,
+		Temperature: config.Temperature,
+		TopP:        config.TopP,
+	})
+	outputStream, err := chatModel.Stream(ctx, in)
+	if err != nil {
+		fmt.Printf("callModel error: %v", err)
+	}
+	return outputStream, nil
+}
+
+func (s *Service) ProcessSampleStream(w http.ResponseWriter, ctx context.Context, sample models.Sample, req *models.EvalBatchTaskRequest) {
+	answerStreamA, errA := s.CallModelStream(ctx, sample.Prompt, &req.ModelA)
+	answerStreamB, errB := s.CallModelStream(ctx, sample.Prompt, &req.ModelB)
+	if errA != nil || errB != nil {
+		fmt.Printf("model error: %v | %v", errA, errB)
+		return
+	}
+	answerA, err := s.ResponseStreamSSE(answerStreamA, w)
+	if err != nil {
+		fmt.Printf("model error during model A streaming: %v", err)
+		return
+	}
+	answerB, err := s.ResponseStreamSSE(answerStreamB, w)
+	if err != nil {
+		fmt.Printf("model error during model B streaming: %v", err)
+		return
+	}
+	judgePrompt := s.GenerateJudgePrompt(*req.JudgeSystemPrompt, &sample, answerA, answerB)
+	judgeStream, errJ := s.CallModelStream(ctx, judgePrompt, &req.ModelJudge)
+	if errJ != nil {
+		fmt.Printf("judge error: %v", errJ)
+		return
+	}
+	_, err = s.ResponseStreamSSE(judgeStream, w)
+	if err != nil {
+		fmt.Printf("model error during judge streaming: %v", err)
+		return
+	}
+	return
+}
+
+func (s *Service) ResponseStreamSSE(sr *schema.StreamReader[*schema.Message], w http.ResponseWriter) (res *schema.Message, err error) {
+	defer sr.Close()
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return nil, fmt.Errorf("streaming not supported")
+	}
+
+	var content strings.Builder
+	i := 0
+
+	for {
+		message, err := sr.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("recv failed: %v", err)
+			return nil, err
+		}
+		msg := fmt.Sprintf("data: %s\n\n", message.Content)
+		_, err = w.Write([]byte(msg))
+		if err != nil {
+			return nil, err
+		}
+
+		// 立即刷新到客户端
+		flusher.Flush()
+
+		content.WriteString(message.Content)
+		i++
+	}
+
+	res = &schema.Message{
+		Role:    schema.Assistant,
+		Content: content.String(),
+	}
+	return res, nil
 }
