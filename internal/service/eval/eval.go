@@ -15,10 +15,8 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 type Service struct {
@@ -40,7 +38,7 @@ func NewEvalService(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Clien
 func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *models.EvalBatchTaskRequest) error {
 	// todo: select only userId
 	var user models.UserDB
-	if err := s.DB.Model(models.UserDB{}).Where("user_id = ?", userId).First(&user).Error; err != nil {
+	if err := s.DB.Model(models.UserDB{}).Where("id = ?", userId).First(&user).Error; err != nil {
 		return err
 	}
 	if &user == nil || user.ID <= 0 {
@@ -96,14 +94,13 @@ func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *model
 	}
 	err = channel.Publish(
 		"",
-		"eval_task_jobs",
-		false,
+		"eval_jobs",
+		true,
 		false,
 		amqp.Publishing{
 			ContentType:  "application/json",
 			Body:         payload,
 			DeliveryMode: amqp.Persistent,
-			Expiration:   strconv.FormatInt(int64(2*time.Hour), 10),
 		},
 	)
 	if err != nil {
@@ -121,7 +118,7 @@ func (s *Service) PreviewEval(ctx context.Context) error {
 // RunEvalTask 并发处理
 func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) error {
 	// prepare sample
-	samples, err := s.GetInputMessages(job.DatasetId, *job.CandidateSystemPrompt, *job.CandidateUserPrompt)
+	samples, err := s.GetInputMessages(job.DatasetItem, job.DatasetId, *job.CandidateSystemPrompt, *job.CandidateUserPrompt)
 	if err != nil {
 		fmt.Printf("GetInputMessages error: %v", err)
 		return err
@@ -158,9 +155,9 @@ func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) er
 		results = append(results, res)
 	}
 	// save to Db
-	var evalResults []*models.EvalTaskResult
+	var evalResults []models.EvalTaskResult
 	for _, result := range results {
-		evalResults = append(evalResults, &models.EvalTaskResult{
+		evalResults = append(evalResults, models.EvalTaskResult{
 			TaskUuid:              &job.TaskUuid,
 			DatasetId:             job.DatasetId,
 			UserId:                job.UserId,
@@ -176,8 +173,19 @@ func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) er
 		})
 	}
 	tx := s.DB.Session(&gorm.Session{}).Begin()
-	if err := s.DB.Model(models.EvalBatchTask{}).Create(evalResults); err != nil {
+	if err := tx.Model(models.EvalTaskResult{}).Create(evalResults).Error; err != nil {
 		fmt.Printf("CreateBatchTask error: %v", err)
+		tx.Rollback()
+	}
+	if err := tx.Commit().Error; err != nil {
+		fmt.Printf("Commit error: %v", err)
+		tx.Rollback()
+	}
+	tx = s.DB.Session(&gorm.Session{}).Begin()
+	if err := tx.Model(models.EvalBatchTask{}).Where("task_uuid = ?", job.TaskUuid).Updates(map[string]interface{}{
+		"status":     "completed",
+		"updated_at": gorm.Expr("NOW()")}).Error; err != nil {
+		fmt.Printf("UpdateBatchTask error: %v", err)
 		tx.Rollback()
 	}
 	if err := tx.Commit().Error; err != nil {
@@ -201,9 +209,9 @@ func (s *Service) GetInputReplaceVariables(input string, values map[string]strin
 	return result, nil
 }
 
-func (s *Service) GetInputMessages(datasetId int, sysPrompt, userPrompt string) ([]models.Sample, error) {
+func (s *Service) GetInputMessages(datasetItem int, datasetId int, sysPrompt, userPrompt string) ([]models.Sample, error) {
 	var datasetItems []*models.DatasetItem
-	if err := s.DB.Model(models.DatasetItem{}).Where("dataset_id = ? && is_deleted = false", datasetId).Find(&datasetItems).Error; err != nil {
+	if err := s.DB.Model(models.DatasetItem{}).Where("dataset_id = ? and is_deleted = false", datasetId).Limit(datasetItem).Find(&datasetItems).Error; err != nil {
 		log.Printf("DatasetItems error: %v", err)
 		return nil, err
 	}
@@ -227,11 +235,11 @@ func (s *Service) GetInputMessages(datasetId int, sysPrompt, userPrompt string) 
 			fmt.Printf("GetInputReplaceVariables error: %v", err)
 		}
 		prompt = append(prompt, &schema.Message{
-			Role:    "System",
+			Role:    "system",
 			Content: handleSysPrompt,
 		})
 		prompt = append(prompt, &schema.Message{
-			Role:    "User",
+			Role:    "user",
 			Content: handleUserPrompt,
 		})
 		samples = append(samples, models.Sample{
@@ -297,11 +305,11 @@ func (s *Service) GenerateJudgePrompt(sysPrompt string, sample *models.Sample, a
 	builder.WriteString("\n")
 	return []*schema.Message{
 		{
-			Role:    "System",
+			Role:    "system",
 			Content: sysPrompt,
 		},
 		{
-			Role:    "User",
+			Role:    "user",
 			Content: builder.String(),
 		},
 	}

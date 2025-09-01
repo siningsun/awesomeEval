@@ -2,6 +2,9 @@ package models
 
 import (
 	"awesomeEval/internal/utils"
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -39,10 +42,10 @@ type EvalBatchTask struct {
 	CandidateSystemPrompt *string     `json:"candidate_system_prompt" gorm:"column:candidate_system_prompt"`
 	CandidateUserPrompt   *string     `json:"candidate_user_prompt" gorm:"column:candidate_user_prompt"`
 	JudgeSystemPrompt     *string     `json:"judge_system_prompt" gorm:"column:judge_system_prompt"`
-	ModelA                ModelConfig `json:"model_a" gorm:"column:model_a"`
-	ModelB                ModelConfig `json:"model_b" gorm:"model_b"`
-	ModelJudge            ModelConfig `json:"model_judge" gorm:"model_judge"`
-	DatasetItem           int         `json:"dataset_item" gorm:"dataset_item"`
+	ModelA                ModelConfig `json:"model_a" gorm:"column:model_config_a;type:jsonb"`
+	ModelB                ModelConfig `json:"model_b" gorm:"column:model_config_b;type:jsonb"`
+	ModelJudge            ModelConfig `json:"model_judge" gorm:"column:model_config_judge;type:jsonb"`
+	DatasetItem           int         `json:"dataset_item" gorm:"column:dataset_item"`
 	IsDeleted             bool        `json:"is_deleted" gorm:"column:is_deleted"`
 }
 
@@ -85,4 +88,16 @@ func (*EvalBatchTask) TableName() string {
 
 func (*EvalTaskResult) TableName() string {
 	return "eval_task_results"
+}
+
+func (m *ModelConfig) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("failed to type assert value to []byte")
+	}
+	return json.Unmarshal(bytes, m)
+}
+
+func (m *ModelConfig) Value() (driver.Value, error) {
+	return json.Marshal(m)
 }

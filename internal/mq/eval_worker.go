@@ -55,7 +55,7 @@ func (w *EvalWorker) Start(ctx context.Context) error {
 		return err
 	}
 
-	log.Println("DatasetWorker started, waiting for jobs...")
+	log.Println("EvalWorker started, waiting for jobs...")
 
 	for msg := range msgs {
 		go func(m amqp.Delivery) {
