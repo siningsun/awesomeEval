@@ -107,3 +107,9 @@ func (m *ModelConfig) Scan(value interface{}) error {
 func (m *ModelConfig) Value() (driver.Value, error) {
 	return json.Marshal(m)
 }
+
+type TaskResult struct {
+	TaskUuid string `json:"task_uuid"`
+	Status   string `json:"status"`
+	Message  string `json:"message"`
+}
