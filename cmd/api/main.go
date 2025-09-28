@@ -2,14 +2,17 @@ package main
 
 import (
 	"awesomeEval/internal/handler"
+	"awesomeEval/internal/logger"
 	"awesomeEval/internal/service/dataset"
 	"awesomeEval/internal/service/eval"
 	"awesomeEval/internal/service/sms"
 	"awesomeEval/middleware"
+	ginzap "github.com/gin-contrib/zap"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"awesomeEval/config"
 	"github.com/gin-gonic/gin"
@@ -22,14 +25,24 @@ func init() {
 		log.Fatalf("加载配置失败: %v", err)
 	}
 
-	// 初始化数据库连接
+	// 初始连接
 	if err := config.InitializeConnections(cfg); err != nil {
 		log.Fatalf("初始化连接失败: %v", err)
+	}
+
+	// init Logger
+	if err := logger.InitLogger(cfg); err != nil {
+		log.Fatalf("init logger failed, error: %v", err)
 	}
 }
 
 func main() {
 	router := gin.Default()
+	router.Use(ginzap.Ginzap(logger.Log, time.RFC3339, true))
+	router.Use(ginzap.RecoveryWithZap(logger.Log, true))
+	// 测试日志
+	logger.Log.Info("server starts successfully")
+
 	// 添加健康检查路由
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
