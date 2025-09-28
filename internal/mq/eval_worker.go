@@ -105,7 +105,7 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 		return err
 	}
 
-	if taskDB.Status == "success" {
+	if taskDB.Status == models.TaskSuccess {
 		msg.Ack(false)
 		return nil
 	}
@@ -130,7 +130,7 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	}
 
 	// 更新任务状态为成功
-	taskDB.Status = "success"
+	taskDB.Status = models.TaskSuccess
 	if err := w.Service.DB.Save(&taskDB).Error; err != nil {
 		log.Printf("Update task status error: %v", err)
 		msg.Nack(false, true)
@@ -138,7 +138,7 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	}
 
 	// 推送消息给前端
-	if err := w.publishResult(task.TaskUuid, "success", "Task completed"); err != nil {
+	if err := w.publishResult(task.TaskUuid, models.TaskSuccess, "Task completed"); err != nil {
 		log.Printf("Publish result error: %v", err)
 	}
 

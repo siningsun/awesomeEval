@@ -8,6 +8,19 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+const (
+	EvalTaskTypePairwise = iota
+	EvalTaskTypeScore
+	EvalTaskTypePairwiseWithJudge
+)
+
+const (
+	TaskPending = "PENDING"
+	TaskRunning = "RUNNING"
+	TaskSuccess = "SUCCESS"
+	TaskFailed  = "FAILED"
+)
+
 type ModelConfig struct {
 	ModelType   int      `json:"model_type"` // local or remote
 	Model       string   `json:"model"`

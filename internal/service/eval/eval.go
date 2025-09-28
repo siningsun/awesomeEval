@@ -21,6 +21,10 @@ import (
 	"sync"
 )
 
+const (
+	MaxConcurrency = 15
+)
+
 type Service struct {
 	Conn        *amqp.Connection
 	DB          *gorm.DB
@@ -133,7 +137,7 @@ func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) er
 		return err
 	}
 	// batch
-	concurrency := 15
+	concurrency := MaxConcurrency
 	var wg sync.WaitGroup
 	inputChan := make(chan models.Sample)
 	outputChan := make(chan models.ModelResult, len(samples))
