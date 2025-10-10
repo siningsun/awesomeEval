@@ -1,6 +1,7 @@
 package mq
 
 import (
+	"awesomeEval/internal/logger"
 	"awesomeEval/internal/models"
 	"awesomeEval/internal/service/eval"
 	"context"
@@ -8,6 +9,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"log"
 	"sync"
@@ -65,7 +67,10 @@ func (w *EvalWorker) Start(ctx context.Context) error {
 		return err
 	}
 
-	log.Println("EvalWorker started, waiting for jobs...")
+	logger.Log.Info("EvalWorker started, waiting for jobs...",
+		zap.String("queue", EvalQueueName),
+		zap.Int("worker_pool_size", EvalWorkerPoolSize),
+	)
 
 	// revise, restrict worker pool size
 	wg := sync.WaitGroup{}

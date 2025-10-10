@@ -2,6 +2,7 @@ package main
 
 import (
 	"awesomeEval/config"
+	"awesomeEval/internal/logger"
 	"awesomeEval/internal/mq"
 	"fmt"
 	"golang.org/x/net/context"
@@ -22,6 +23,10 @@ func init() {
 	if err := config.InitializeConnections(cfg); err != nil {
 		log.Fatalf("初始化连接失败: %v", err)
 	}
+	// init logger
+	if err := logger.InitLogger(cfg); err != nil {
+		log.Fatal("初始化日志失败: ", err)
+	}
 	DatasetWorker = mq.NewDatasetWorker(config.GetRabbitMQ(), config.GetPostgreSQL(), config.GetMinio(), config.GetRedis())
 	EvalWorker = mq.NewEvalWorker(config.GetRabbitMQ(), config.GetPostgreSQL(), config.GetMinio(), config.GetRedis())
 }
@@ -35,7 +40,6 @@ func main() {
 			errCh <- fmt.Errorf("DatasetWorker: %w", err)
 			return
 		}
-		fmt.Println("DatasetWorker starts!")
 		errCh <- nil
 	}()
 
@@ -44,7 +48,6 @@ func main() {
 			errCh <- fmt.Errorf("EvalWorker: %w", err)
 			return
 		}
-		fmt.Println("EvalWorker starts!")
 		errCh <- nil
 	}()
 
@@ -52,7 +55,6 @@ func main() {
 	for i := 0; i < 2; i++ {
 		if err := <-errCh; err != nil {
 			fmt.Printf("Error: %v\n", err)
-			// 可选：终止程序或取消 context
 		}
 	}
 }

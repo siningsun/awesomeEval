@@ -1,6 +1,7 @@
 package mq
 
 import (
+	"awesomeEval/internal/logger"
 	"awesomeEval/internal/models"
 	"awesomeEval/internal/service/dataset"
 	"context"
@@ -8,8 +9,13 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"log"
+)
+
+const (
+	DatasetQueueName = "dataset_jobs"
 )
 
 type DatasetWorker struct {
@@ -43,19 +49,20 @@ func (w *DatasetWorker) Start(ctx context.Context) error {
 	}
 
 	msgs, err := channel.Consume(
-		"dataset_jobs", // 队列名称
-		"",             // consumer tag
-		false,          // auto-ack
-		false,          // exclusive
-		false,          // no-local
-		false,          // no-wait
+		DatasetQueueName, // 队列名称
+		"",               // consumer tag
+		false,            // auto-ack
+		false,            // exclusive
+		false,            // no-local
+		false,            // no-wait
 		nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	log.Println("DatasetWorker started, waiting for jobs...")
+	logger.Log.Info("DatasetWorker started, waiting for jobs...",
+		zap.String("queue", DatasetQueueName))
 
 	for msg := range msgs {
 		go func(m amqp.Delivery) {

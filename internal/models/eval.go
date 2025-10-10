@@ -9,20 +9,20 @@ import (
 )
 
 const (
-	EvalTaskTypePairwise = iota
+	EvalTaskTypePairwiseWithJudge = iota // default 0
 	EvalTaskTypeScore
-	EvalTaskTypePairwiseWithJudge
+	EvalTaskTypePairwise
 )
 
 const (
-	TaskPending = "PENDING"
-	TaskRunning = "RUNNING"
-	TaskSuccess = "SUCCESS"
-	TaskFailed  = "FAILED"
+	TaskPending = "pending"
+	TaskRunning = "running"
+	TaskSuccess = "success"
+	TaskFailed  = "failed"
 )
 
 type ModelConfig struct {
-	ModelType   int      `json:"model_type"` // local or remote
+	ModelType   int      `json:"model_type"` // default 0, local model not supported.
 	Model       string   `json:"model"`
 	APIKey      string   `json:"api_key"`
 	BaseURL     string   `json:"base_url"`
