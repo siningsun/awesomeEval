@@ -1,10 +1,10 @@
 package eval
 
 import (
+	"awesomeEval/internal/logger"
 	"awesomeEval/internal/models"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/schema"
@@ -12,6 +12,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"io"
 	"log"
@@ -23,6 +24,7 @@ import (
 
 const (
 	MaxConcurrency = 15
+	EvalQueueName  = "eval_jobs"
 )
 
 type Service struct {
@@ -42,13 +44,20 @@ func NewEvalService(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Clien
 }
 
 func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *models.EvalBatchTaskRequest) error {
-	// todo: select only userId
+	logger.Log.Info("CreateBatchEvalJob started",
+		zap.Int("userId", userId),
+		zap.Int("datasetId", req.DatasetId))
 	var user models.UserDB
 	if err := s.DB.Model(models.UserDB{}).Where("id = ?", userId).First(&user).Error; err != nil {
+		logger.Log.Error("CreateBatchEvalJob user not found, "+err.Error(),
+			zap.Int("userId", userId),
+		)
 		return err
 	}
 	if &user == nil || user.ID <= 0 {
-		return errors.New("invalid user")
+		log.Println("CreateBatchEvalJob user not found",
+			zap.Int("userId", userId))
+		return fmt.Errorf("CreateBatchEvalJob user not found")
 	}
 	taskUuid := uuid.New().String()
 	evalTask := &models.EvalBatchTask{
@@ -69,22 +78,29 @@ func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *model
 	tx := s.DB.Session(&gorm.Session{}).Begin()
 	if err := tx.Create(evalTask).Error; err != nil {
 		tx.Rollback()
+		logger.Log.Error("CreateBatchEvalJob tx err"+err.Error(),
+			zap.Int("userId", userId),
+		)
 		return err
 	}
 	if err := tx.Commit().Error; err != nil {
 		tx.Rollback()
+		logger.Log.Error("CreateBatchEvalJob tx commit err"+err.Error(),
+			zap.Int("userId", userId))
 		return err
 	}
 	// publish
 	channel, err := s.Conn.Channel()
 	if err != nil {
 		log.Printf("RabbitMQ channel error: %v", err)
+		logger.Log.Error("CreateBatchEvalJob channel err"+err.Error(),
+			zap.Int("userId", userId))
 		return err
 	}
 	defer channel.Close()
 	// 声明队列
 	_, err = channel.QueueDeclare(
-		"eval_jobs",
+		EvalQueueName,
 		true,  // durable
 		false, // autoDelete
 		false, // exclusive
@@ -92,15 +108,21 @@ func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *model
 		nil,
 	)
 	if err != nil {
+		logger.Log.Error("CreateBatchEvalJob channel queue err"+err.Error(),
+			zap.Int("userId", userId))
+		log.Fatalf("CreateBatchEvalJob channel queue err " + err.Error())
 		return err
 	}
 	payload, err := json.Marshal(evalTask)
 	if err != nil {
+		logger.Log.Error("CreateBatchEvalJob marshal err"+err.Error(),
+			zap.Int("userId", userId))
+		log.Fatalf("CreateBatchEvalJob marshal err " + err.Error())
 		return err
 	}
 	err = channel.Publish(
 		"",
-		"eval_jobs",
+		EvalQueueName,
 		true,
 		false,
 		amqp.Publishing{
@@ -110,9 +132,14 @@ func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *model
 		},
 	)
 	if err != nil {
+		logger.Log.Error("CreateBatchEvalJob channel publish err"+err.Error(),
+			zap.Int("userId", userId))
 		log.Printf("RabbitMQ publish error: %v", err)
 		return err
 	}
+	logger.Log.Info("CreateBatchEvalJob success",
+		zap.Int("userId", userId))
+	log.Printf("CreateBatchEvalJob publish rabbitmq success")
 	return nil
 }
 

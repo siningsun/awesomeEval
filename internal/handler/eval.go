@@ -19,35 +19,18 @@ func NewEvalHandler(evalService *eval.Service) *EvalHandler {
 }
 
 func (h *EvalHandler) CreateBatchEvalJob(c *gin.Context) {
-	// obtain user_id
-	var userID int
-	uid, _ := c.Get("user_id")
-	switch uid.(type) {
-	case int:
-		userID = uid.(int)
-	case int64:
-		userID = int(uid.(int64))
-	case string:
-		id, err := strconv.Atoi(uid.(string))
-		if err != nil {
-			c.JSON(500, codes.CommonInternalErrorCode)
-			return
-		}
-		userID = id
-	default:
-		userIdStr := fmt.Sprintf("%v", uid)
-		id, err := strconv.Atoi(userIdStr)
-		if err != nil {
-			c.JSON(500, codes.CommonInternalErrorCode)
-			return
-		}
-		userID = id
+	userId, err := h.getUserId(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, codes.UserNotFoundCode)
+	}
+	if userId <= 0 {
+		c.JSON(http.StatusUnauthorized, codes.UserNotFoundCode)
 	}
 	var evalRequest models.EvalBatchTaskRequest
 	if err := c.ShouldBindBodyWithJSON(&evalRequest); err != nil {
 		c.JSON(500, codes.CommonInternalErrorCode)
 	}
-	err := h.EvalService.CreateBatchEvalJob(c.Request.Context(), userID, &evalRequest)
+	err = h.EvalService.CreateBatchEvalJob(c.Request.Context(), userId, &evalRequest)
 	if err != nil {
 		c.JSON(500, codes.CommonInternalErrorCode)
 	}
@@ -55,33 +38,12 @@ func (h *EvalHandler) CreateBatchEvalJob(c *gin.Context) {
 }
 
 func (h *EvalHandler) PreviewEval(c *gin.Context) {
-	// stream
-	// obtain user_id
-	var userID int
-	uid, _ := c.Get("user_id")
-	switch uid.(type) {
-	case int:
-		userID = uid.(int)
-	case int64:
-		userID = int(uid.(int64))
-	case string:
-		id, err := strconv.Atoi(uid.(string))
-		if err != nil {
-			c.JSON(500, codes.CommonInternalErrorCode)
-			return
-		}
-		userID = id
-	default:
-		userIdStr := fmt.Sprintf("%v", uid)
-		id, err := strconv.Atoi(userIdStr)
-		if err != nil {
-			c.JSON(500, codes.CommonInternalErrorCode)
-			return
-		}
-		userID = id
+	userId, err := h.getUserId(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, codes.UserNotFoundCode)
 	}
-	if userID <= 0 {
-
+	if userId <= 0 {
+		c.JSON(http.StatusUnauthorized, codes.CommonUnauthorizedCode)
 	}
 	var evalRequest models.EvalBatchTaskRequest
 	if err := c.ShouldBindBodyWithJSON(&evalRequest); err != nil {
@@ -94,4 +56,29 @@ func (h *EvalHandler) PreviewEval(c *gin.Context) {
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 	h.EvalService.PreviewEval(c.Writer, c.Request.Context(), &evalRequest)
+}
+
+func (h *EvalHandler) getUserId(c *gin.Context) (int, error) {
+	var userId int
+	uid, _ := c.Get("user_id")
+	switch uid.(type) {
+	case string:
+		id, err := strconv.Atoi(uid.(string))
+		if err != nil {
+			return 0, err
+		}
+		userId = id
+	case int:
+		userId = uid.(int)
+	case int64:
+		userId = int(uid.(int64))
+	default:
+		userIdStr := fmt.Sprintf("%v", uid)
+		id, err := strconv.Atoi(userIdStr)
+		if err != nil {
+			return 0, err
+		}
+		userId = id
+	}
+	return userId, nil
 }
