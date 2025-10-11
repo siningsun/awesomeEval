@@ -155,46 +155,73 @@ func (s *Service) PreviewEval(w http.ResponseWriter, ctx context.Context, req *m
 	return
 }
 
-// RunEvalTask 并发处理
-func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) error {
-	// prepare sample
+func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) ([]models.ModelResult, error) {
 	samples, err := s.GetInputMessages(job.DatasetItem, job.DatasetId, *job.CandidateSystemPrompt, *job.CandidateUserPrompt)
 	if err != nil {
-		fmt.Printf("GetInputMessages error: %v", err)
-		return err
+		logger.Log.Error("RunEvalTask GetInputMessages err"+err.Error(),
+			zap.String("task_uuid", job.TaskUuid),
+			zap.Int("userId", job.UserId))
+		return nil, err
 	}
-	// batch
+
 	concurrency := MaxConcurrency
-	var wg sync.WaitGroup
 	inputChan := make(chan models.Sample)
 	outputChan := make(chan models.ModelResult, len(samples))
-	// Workers
+
+	var wg sync.WaitGroup
+
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for sample := range inputChan {
-				res := s.ProcessSample(ctx, sample, job)
-				outputChan <- res
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					res := s.ProcessSample(ctx, sample, job)
+					select {
+					case outputChan <- res:
+					case <-ctx.Done():
+						return
+					}
+				}
 			}
 		}()
 	}
-	// Feed data
+
 	go func() {
 		for _, sample := range samples {
-			inputChan <- sample
+			select {
+			case <-ctx.Done():
+				break
+			case inputChan <- sample:
+			}
 		}
 		close(inputChan)
 	}()
-	// Wait for all to finish
-	wg.Wait()
-	close(outputChan)
-	// Collect results
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(outputChan)
+		close(done)
+	}()
+
 	var results []models.ModelResult
 	for res := range outputChan {
 		results = append(results, res)
 	}
-	// save to Db
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-done:
+		return results, nil
+	}
+}
+
+func (s *Service) SaveEvalResults(job *models.EvalBatchTask, results []models.ModelResult) error {
 	var evalResults []models.EvalTaskResult
 	for _, result := range results {
 		evalResults = append(evalResults, models.EvalTaskResult{
@@ -214,22 +241,11 @@ func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) er
 	}
 	tx := s.DB.Session(&gorm.Session{}).Begin()
 	if err := tx.Model(models.EvalTaskResult{}).Create(evalResults).Error; err != nil {
-		fmt.Printf("CreateBatchTask error: %v", err)
+		logger.Log.Error("SaveEvalResults tx err" + err.Error())
 		tx.Rollback()
 	}
 	if err := tx.Commit().Error; err != nil {
-		fmt.Printf("Commit error: %v", err)
-		tx.Rollback()
-	}
-	tx = s.DB.Session(&gorm.Session{}).Begin()
-	if err := tx.Model(models.EvalBatchTask{}).Where("task_uuid = ?", job.TaskUuid).Updates(map[string]interface{}{
-		"status":     "completed",
-		"updated_at": gorm.Expr("NOW()")}).Error; err != nil {
-		fmt.Printf("UpdateBatchTask error: %v", err)
-		tx.Rollback()
-	}
-	if err := tx.Commit().Error; err != nil {
-		fmt.Printf("Commit error: %v", err)
+		logger.Log.Error("SaveEvalResults tx commit err" + err.Error())
 		tx.Rollback()
 	}
 	return nil

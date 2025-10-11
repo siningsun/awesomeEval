@@ -141,7 +141,7 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	taskCtx, cancel := context.WithTimeout(ctx, EvalTimeout)
 	defer cancel()
 
-	err := w.Service.RunEvalTask(taskCtx, &task)
+	taskRes, err := w.Service.RunEvalTask(taskCtx, &task)
 	if err != nil {
 		logger.Log.Error(fmt.Sprintf("Failed to run task, retry %d", retryCount), zap.Error(err))
 		return w.handleFailure(channel, msg, task, retryCount)
@@ -150,6 +150,12 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	taskDB.Status = models.TaskSuccess
 	if err := w.Service.DB.Save(&taskDB).Error; err != nil {
 		logger.Log.Error("Failed to save task in DB", zap.Error(err))
+		msg.Nack(false, true)
+		return err
+	}
+
+	if err := w.Service.SaveEvalResults(&task, taskRes); err != nil {
+		logger.Log.Error("Failed to save task results in DB", zap.Error(err))
 		msg.Nack(false, true)
 		return err
 	}
