@@ -31,7 +31,7 @@ func init() {
 	}
 
 	// init Logger
-	if err := logger.InitLogger(cfg); err != nil {
+	if err := logger.InitLogger(cfg, "gin-api"); err != nil {
 		log.Fatalf("init logger failed, error: %v", err)
 	}
 }

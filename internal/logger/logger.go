@@ -8,7 +8,7 @@ import (
 
 var Log *zap.Logger
 
-func InitLogger(cfg *config.Config) error {
+func InitLogger(cfg *config.Config, moduleName string) error {
 	logConf := cfg.Log
 
 	level := zapcore.InfoLevel
@@ -32,6 +32,6 @@ func InitLogger(cfg *config.Config) error {
 		return err
 	}
 
-	Log = logger
+	Log = logger.With(zap.String("module", moduleName))
 	return nil
 }

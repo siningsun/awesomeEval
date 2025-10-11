@@ -6,6 +6,7 @@ import (
 	"awesomeEval/internal/service/eval"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
@@ -98,14 +99,19 @@ func (w *EvalWorker) Start(ctx context.Context) error {
 func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, msg amqp.Delivery) error {
 	var task models.EvalBatchTask
 	if err := json.Unmarshal(msg.Body, &task); err != nil {
-		log.Printf("Unmarshal error: %v", err)
+		logger.Log.Error("Failed to unmarshal task", zap.Error(err),
+			zap.String("body", string(msg.Body)),
+			zap.String("queue", EvalQueueName),
+		)
 		msg.Nack(false, false)
 		return err
 	}
 
 	var taskDB models.EvalBatchTask
 	if err := w.Service.DB.Where("task_uuid = ?", task.TaskUuid).First(&taskDB).Error; err != nil {
-		log.Printf("Query task error: %v", err)
+		logger.Log.Error("Failed to query task in DB", zap.Error(err),
+			zap.String("task_uuid", task.TaskUuid),
+			zap.String("queue", EvalQueueName))
 		msg.Nack(false, false)
 		return err
 	}
@@ -130,14 +136,18 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	// 执行任务
 	err := w.Service.RunEvalTask(taskCtx, &task)
 	if err != nil {
-		log.Printf("RunEvalTask error: %v", err)
+		logger.Log.Error(fmt.Sprintf("Failed to run task, current retry: %d. ", retryCount)+err.Error(),
+			zap.String("task_uuid", task.TaskUuid),
+			zap.String("queue", EvalQueueName))
 		return w.handleFailure(channel, msg, task, retryCount)
 	}
 
 	// 更新任务状态为成功
 	taskDB.Status = models.TaskSuccess
 	if err := w.Service.DB.Save(&taskDB).Error; err != nil {
-		log.Printf("Update task status error: %v", err)
+		logger.Log.Error("Failed to save task in DB", zap.Error(err),
+			zap.String("task_uuid", task.TaskUuid),
+			zap.String("queue", EvalQueueName))
 		msg.Nack(false, true)
 		return err
 	}
@@ -148,15 +158,19 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	}
 
 	msg.Ack(false)
-	log.Printf("Task %s succeeded", task.TaskUuid)
+	logger.Log.Info("Task finished successfully",
+		zap.String("task_uuid", task.TaskUuid),
+		zap.String("queue", EvalQueueName))
 	return nil
 }
 
 // 处理失败任务
 func (w *EvalWorker) handleFailure(channel *amqp.Channel, msg amqp.Delivery, task models.EvalBatchTask, retryCount int) error {
 	if retryCount >= EvalMaxRetry {
-		log.Printf("Task %s reached max retries, sending to DLQ", task.TaskUuid)
-		msg.Nack(false, false) // DLQ
+		logger.Log.Info(fmt.Sprintf("Task %s retry limit exceeded", task.TaskUuid),
+			zap.String("task_uuid", task.TaskUuid),
+			zap.String("queue", EvalQueueName))
+		msg.Nack(false, false) // DLQ, 不再重试
 		return nil
 	}
 
@@ -178,13 +192,17 @@ func (w *EvalWorker) handleFailure(channel *amqp.Channel, msg amqp.Delivery, tas
 			Headers:     newHeaders,
 		},
 	); err != nil {
-		log.Printf("Re-publish failed: %v", err)
-		msg.Nack(false, true)
+		logger.Log.Error("Failed to publish message", zap.Error(err),
+			zap.String("task_uuid", task.TaskUuid),
+			zap.String("queue", EvalQueueName))
+		msg.Nack(false, true) // requeue, still trying
 		return err
 	}
 
 	msg.Ack(false)
-	log.Printf("Task %s requeued, retry %d", task.TaskUuid, retryCount+1)
+	logger.Log.Info(fmt.Sprintf("Task retrying: %d times", retryCount),
+		zap.String("task_uuid", task.TaskUuid),
+		zap.String("queue", EvalQueueName))
 	return nil
 }
 

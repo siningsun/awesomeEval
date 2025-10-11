@@ -24,7 +24,7 @@ func init() {
 		log.Fatalf("初始化连接失败: %v", err)
 	}
 	// init logger
-	if err := logger.InitLogger(cfg); err != nil {
+	if err := logger.InitLogger(cfg, "mq-worker"); err != nil {
 		log.Fatal("初始化日志失败: ", err)
 	}
 	DatasetWorker = mq.NewDatasetWorker(config.GetRabbitMQ(), config.GetPostgreSQL(), config.GetMinio(), config.GetRedis())
