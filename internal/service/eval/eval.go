@@ -25,6 +25,7 @@ import (
 const (
 	MaxConcurrency = 15
 	EvalQueueName  = "eval_jobs"
+	EvalDLQName    = "eval_jobs_dlq"
 )
 
 type Service struct {
@@ -98,15 +99,45 @@ func (s *Service) CreateBatchEvalJob(ctx context.Context, userId int, req *model
 		return err
 	}
 	defer channel.Close()
-	// 声明队列
+	//// 声明队列
+	//_, err = channel.QueueDeclare(
+	//	EvalQueueName,
+	//	true,  // durable
+	//	false, // autoDelete
+	//	false, // exclusive
+	//	false, // noWait
+	//	nil,
+	//)
+
+	// 声明死信队列
 	_, err = channel.QueueDeclare(
-		EvalQueueName,
-		true,  // durable
-		false, // autoDelete
-		false, // exclusive
-		false, // noWait
+		EvalDLQName,
+		true,
+		false,
+		false,
+		false,
 		nil,
 	)
+
+	if err != nil {
+		logger.Log.Error("CreateBatchEvalJob eval dql queue err"+err.Error(),
+			zap.Int("userId", userId),
+		)
+		return err
+	}
+	// 声明主队列并绑定死信队列
+	_, err = channel.QueueDeclare(
+		EvalQueueName,
+		true,
+		false,
+		false,
+		false,
+		amqp.Table{
+			"x-dead-letter-exchange":    "",
+			"x-dead-letter-routing-key": EvalDLQName,
+		},
+	)
+
 	if err != nil {
 		logger.Log.Error("CreateBatchEvalJob channel queue err"+err.Error(),
 			zap.Int("userId", userId))
@@ -190,11 +221,12 @@ func (s *Service) RunEvalTask(ctx context.Context, job *models.EvalBatchTask) ([
 		}()
 	}
 
+	// goroutine 分配任务
 	go func() {
 		for _, sample := range samples {
 			select {
 			case <-ctx.Done():
-				break
+				return
 			case inputChan <- sample:
 			}
 		}
@@ -267,7 +299,10 @@ func (s *Service) GetInputReplaceVariables(input string, values map[string]strin
 
 func (s *Service) GetInputMessages(datasetItem int, datasetId int, sysPrompt, userPrompt string) ([]models.Sample, error) {
 	var datasetItems []*models.DatasetItem
-	if err := s.DB.Model(models.DatasetItem{}).Where("dataset_id = ? and is_deleted = false", datasetId).Limit(datasetItem).Find(&datasetItems).Error; err != nil {
+	if err := s.DB.Model(models.DatasetItem{}).
+		Where("dataset_id = ? and is_deleted = false", datasetId).
+		Order("id ASC").
+		Limit(datasetItem).Find(&datasetItems).Error; err != nil {
 		log.Printf("DatasetItems error: %v", err)
 		return nil, err
 	}

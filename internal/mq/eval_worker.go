@@ -141,6 +141,10 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	taskCtx, cancel := context.WithTimeout(ctx, EvalTimeout)
 	defer cancel()
 
+	logger.Log.Info("Executing task",
+		zap.String("task", task.TaskUuid),
+		zap.Int("retry_count", retryCount))
+
 	taskRes, err := w.Service.RunEvalTask(taskCtx, &task)
 	if err != nil {
 		logger.Log.Error(fmt.Sprintf("Failed to run task, retry %d", retryCount), zap.Error(err))
@@ -148,11 +152,16 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	}
 
 	taskDB.Status = models.TaskSuccess
+
 	if err := w.Service.DB.Save(&taskDB).Error; err != nil {
 		logger.Log.Error("Failed to save task in DB", zap.Error(err))
 		msg.Nack(false, true)
 		return err
 	}
+
+	logger.Log.Info("Updating Task status in DB succeeded",
+		zap.String("task", task.TaskUuid),
+		zap.Int("retry_count", retryCount))
 
 	if err := w.Service.SaveEvalResults(&task, taskRes); err != nil {
 		logger.Log.Error("Failed to save task results in DB", zap.Error(err))
@@ -160,12 +169,24 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 		return err
 	}
 
+	logger.Log.Info("Updating Task results in DB succeeded",
+		zap.String("task", task.TaskUuid),
+		zap.Int("retry_count", retryCount))
+
 	if err := w.publishResult(task.TaskUuid, models.TaskSuccess, "Task completed"); err != nil {
 		log.Printf("Publish result error: %v", err)
 	}
 
+	logger.Log.Info("Publish result to Redis succeeded",
+		zap.String("task", task.TaskUuid),
+		zap.Int("retry_count", retryCount))
+
 	msg.Ack(false)
-	logger.Log.Info("Task finished successfully", zap.String("task_uuid", task.TaskUuid))
+
+	logger.Log.Info("Task finished successfully",
+		zap.String("task_uuid", task.TaskUuid),
+		zap.Int("retry_count", retryCount))
+
 	return nil
 }
 
