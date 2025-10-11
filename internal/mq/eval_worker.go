@@ -13,12 +13,13 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"log"
-	"sync"
+	"math"
 	"time"
 )
 
 const (
 	EvalQueueName      = "eval_jobs"
+	EvalDLQName        = "eval_jobs_dlq"
 	EvalTimeout        = 1 * time.Hour
 	EvalMaxRetry       = 5
 	EvalWorkerPoolSize = 15
@@ -43,25 +44,39 @@ func (w *EvalWorker) Start(ctx context.Context) error {
 	}
 	defer channel.Close()
 
+	// 声明死信队列
+	_, _ = channel.QueueDeclare(
+		EvalDLQName,
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+
+	// 声明主队列并绑定死信队列
 	_, err = channel.QueueDeclare(
-		EvalQueueName, // 队列名称
-		true,          // durable
-		false,         // autoDelete
-		false,         // exclusive
-		false,         // noWait
-		nil,           // arguments
+		EvalQueueName,
+		true,
+		false,
+		false,
+		false,
+		amqp.Table{
+			"x-dead-letter-exchange":    "",
+			"x-dead-letter-routing-key": EvalDLQName,
+		},
 	)
 	if err != nil {
 		return err
 	}
 
 	msgs, err := channel.Consume(
-		EvalQueueName, // 队列名称
-		"",            // consumer tag
-		false,         // auto-ack
-		false,         // exclusive
-		false,         // no-local
-		false,         // no-wait
+		EvalQueueName,
+		"",
+		false,
+		false,
+		false,
+		false,
 		nil,
 	)
 	if err != nil {
@@ -73,45 +88,40 @@ func (w *EvalWorker) Start(ctx context.Context) error {
 		zap.Int("worker_pool_size", EvalWorkerPoolSize),
 	)
 
-	// revise, restrict worker pool size
-	wg := sync.WaitGroup{}
-	for msg := range msgs {
+	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Worker context canceled")
-			break
-		case w.PoolSem <- struct{}{}:
-			wg.Add(1)
+			logger.Log.Info("EvalWorker context canceled, shutting down...")
+			return nil
+		case msg, ok := <-msgs:
+			if !ok {
+				logger.Log.Warn("Message channel closed, shutting down EvalWorker...")
+				return nil
+			}
+
+			w.PoolSem <- struct{}{}
 			go func(m amqp.Delivery) {
-				defer wg.Done()
 				defer func() { <-w.PoolSem }()
+
 				if err := w.processMessage(ctx, channel, m); err != nil {
 					log.Printf("Task failed: %v", err)
 				}
 			}(msg)
 		}
 	}
-	wg.Wait()
-	return nil
 }
 
-// 处理单条消息
 func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, msg amqp.Delivery) error {
 	var task models.EvalBatchTask
 	if err := json.Unmarshal(msg.Body, &task); err != nil {
-		logger.Log.Error("Failed to unmarshal task", zap.Error(err),
-			zap.String("body", string(msg.Body)),
-			zap.String("queue", EvalQueueName),
-		)
+		logger.Log.Error("Failed to unmarshal task", zap.Error(err))
 		msg.Nack(false, false)
 		return err
 	}
 
 	var taskDB models.EvalBatchTask
 	if err := w.Service.DB.Where("task_uuid = ?", task.TaskUuid).First(&taskDB).Error; err != nil {
-		logger.Log.Error("Failed to query task in DB", zap.Error(err),
-			zap.String("task_uuid", task.TaskUuid),
-			zap.String("queue", EvalQueueName))
+		logger.Log.Error("Failed to query task in DB", zap.Error(err))
 		msg.Nack(false, false)
 		return err
 	}
@@ -121,65 +131,54 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 		return nil
 	}
 
-	// 获取当前重试次数
 	retryCount := 0
 	if val, ok := msg.Headers["x-retry"]; ok {
-		if intVal, ok := val.(int32); ok {
-			retryCount = int(intVal)
+		if floatVal, ok := val.(float64); ok { // amqp.Table 默认 float64
+			retryCount = int(floatVal)
 		}
 	}
 
-	// 超时 Context
 	taskCtx, cancel := context.WithTimeout(ctx, EvalTimeout)
 	defer cancel()
 
-	// 执行任务
 	err := w.Service.RunEvalTask(taskCtx, &task)
 	if err != nil {
-		logger.Log.Error(fmt.Sprintf("Failed to run task, current retry: %d. ", retryCount)+err.Error(),
-			zap.String("task_uuid", task.TaskUuid),
-			zap.String("queue", EvalQueueName))
+		logger.Log.Error(fmt.Sprintf("Failed to run task, retry %d", retryCount), zap.Error(err))
 		return w.handleFailure(channel, msg, task, retryCount)
 	}
 
-	// 更新任务状态为成功
 	taskDB.Status = models.TaskSuccess
 	if err := w.Service.DB.Save(&taskDB).Error; err != nil {
-		logger.Log.Error("Failed to save task in DB", zap.Error(err),
-			zap.String("task_uuid", task.TaskUuid),
-			zap.String("queue", EvalQueueName))
+		logger.Log.Error("Failed to save task in DB", zap.Error(err))
 		msg.Nack(false, true)
 		return err
 	}
 
-	// 推送消息给前端
 	if err := w.publishResult(task.TaskUuid, models.TaskSuccess, "Task completed"); err != nil {
 		log.Printf("Publish result error: %v", err)
 	}
 
 	msg.Ack(false)
-	logger.Log.Info("Task finished successfully",
-		zap.String("task_uuid", task.TaskUuid),
-		zap.String("queue", EvalQueueName))
+	logger.Log.Info("Task finished successfully", zap.String("task_uuid", task.TaskUuid))
 	return nil
 }
 
-// 处理失败任务
 func (w *EvalWorker) handleFailure(channel *amqp.Channel, msg amqp.Delivery, task models.EvalBatchTask, retryCount int) error {
 	if retryCount >= EvalMaxRetry {
-		logger.Log.Info(fmt.Sprintf("Task %s retry limit exceeded", task.TaskUuid),
-			zap.String("task_uuid", task.TaskUuid),
-			zap.String("queue", EvalQueueName))
-		msg.Nack(false, false) // DLQ, 不再重试
+		logger.Log.Info("Retry limit exceeded, sending to DLQ", zap.String("task_uuid", task.TaskUuid))
+		msg.Nack(false, false)
 		return nil
 	}
 
-	// 重新投递
+	// 指数退避，延迟重试
+	delay := time.Duration(math.Pow(2, float64(retryCount))) * time.Second
+	time.Sleep(delay)
+
 	newHeaders := msg.Headers
 	if newHeaders == nil {
 		newHeaders = amqp.Table{}
 	}
-	newHeaders["x-retry"] = int32(retryCount + 1)
+	newHeaders["x-retry"] = float64(retryCount + 1)
 
 	if err := channel.Publish(
 		"",
@@ -187,22 +186,20 @@ func (w *EvalWorker) handleFailure(channel *amqp.Channel, msg amqp.Delivery, tas
 		false,
 		false,
 		amqp.Publishing{
-			ContentType: msg.ContentType,
-			Body:        msg.Body,
-			Headers:     newHeaders,
+			DeliveryMode: amqp.Persistent,
+			ContentType:  msg.ContentType,
+			Body:         msg.Body,
+			Headers:      newHeaders,
 		},
 	); err != nil {
-		logger.Log.Error("Failed to publish message", zap.Error(err),
-			zap.String("task_uuid", task.TaskUuid),
-			zap.String("queue", EvalQueueName))
-		msg.Nack(false, true) // requeue, still trying
+		logger.Log.Error("Failed to publish message", zap.Error(err))
+		msg.Nack(false, true)
 		return err
 	}
 
 	msg.Ack(false)
-	logger.Log.Info(fmt.Sprintf("Task retrying: %d times", retryCount),
-		zap.String("task_uuid", task.TaskUuid),
-		zap.String("queue", EvalQueueName))
+	logger.Log.Info(fmt.Sprintf("Task retrying: %d times", retryCount+1),
+		zap.String("task_uuid", task.TaskUuid))
 	return nil
 }
 
