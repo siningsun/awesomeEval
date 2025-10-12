@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	RedisEvalChannel = "eval_task_result"
+	RedisEvalChannel = "eval_task_results"
 )
 
 func StartRedisSubscriber(ctx context.Context, rdb *redis.Client, hub *Hub) {
