@@ -7,6 +7,7 @@ import (
 	"awesomeEval/internal/service/eval"
 	"awesomeEval/internal/service/sms"
 	"awesomeEval/middleware"
+	"context"
 	ginzap "github.com/gin-contrib/zap"
 	"log"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"awesomeEval/config"
+	"awesomeEval/internal/ws"
 	"github.com/gin-gonic/gin"
 )
 
@@ -37,6 +39,11 @@ func init() {
 }
 
 func main() {
+	// start WebSocket hub
+	hub := ws.NewHub()
+	go hub.Run()
+	ws.StartRedisSubscriber(context.Background(), config.GlobalConnections.Redis, hub)
+	// start Gin server
 	router := gin.Default()
 	router.Use(ginzap.Ginzap(logger.Log, time.RFC3339, true))
 	router.Use(ginzap.RecoveryWithZap(logger.Log, true))
@@ -47,7 +54,7 @@ func main() {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "ok",
-			"message": "服务运行正常",
+			"message": "server is healthy",
 		})
 	})
 	// New AuthHandler
@@ -87,8 +94,9 @@ func main() {
 	// 优雅关闭
 	go func() {
 		if err := router.Run(":8080"); err != nil {
-			log.Fatalf("启动服务器失败: %v", err)
+			log.Fatalf("failed to start server: %v", err)
 		}
+		router.GET("/ws", ws.ServeWs(hub))
 	}()
 
 	// 等待中断信号
@@ -96,12 +104,12 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("正在关闭服务器...")
+	log.Println("server shutting down...")
 
 	// 关闭数据库连接
 	if config.GlobalConnections != nil {
 		config.GlobalConnections.Close()
 	}
 
-	log.Println("服务器已关闭")
+	log.Println("server closed.")
 }

@@ -18,11 +18,12 @@ import (
 )
 
 const (
-	EvalQueueName      = "eval_jobs"
-	EvalDLQName        = "eval_jobs_dlq"
-	EvalTimeout        = 1 * time.Hour
-	EvalMaxRetry       = 5
-	EvalWorkerPoolSize = 15
+	EvalQueueName        = "eval_jobs"
+	EvalDLQName          = "eval_jobs_dlq"
+	EvalTimeout          = 1 * time.Hour
+	EvalMaxRetry         = 5
+	EvalWorkerPoolSize   = 15
+	EvalTaskRedisChannel = "eval_task_results"
 )
 
 type EvalWorker struct {
@@ -142,7 +143,7 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	defer cancel()
 
 	logger.Log.Info("Executing task",
-		zap.String("task", task.TaskUuid),
+		zap.String("task_uuid", task.TaskUuid),
 		zap.Int("retry_count", retryCount))
 
 	taskRes, err := w.Service.RunEvalTask(taskCtx, &task)
@@ -160,7 +161,7 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	}
 
 	logger.Log.Info("Updating Task status in DB succeeded",
-		zap.String("task", task.TaskUuid),
+		zap.String("task_uuid", task.TaskUuid),
 		zap.Int("retry_count", retryCount))
 
 	if err := w.Service.SaveEvalResults(&task, taskRes); err != nil {
@@ -170,15 +171,15 @@ func (w *EvalWorker) processMessage(ctx context.Context, channel *amqp.Channel, 
 	}
 
 	logger.Log.Info("Updating Task results in DB succeeded",
-		zap.String("task", task.TaskUuid),
+		zap.String("task_uuid", task.TaskUuid),
 		zap.Int("retry_count", retryCount))
 
-	if err := w.publishResult(task.TaskUuid, models.TaskSuccess, "Task completed"); err != nil {
+	if err := w.publishResult(ctx, task.TaskUuid, models.TaskSuccess, fmt.Sprintf("task: %s success", task.TaskUuid)); err != nil {
 		log.Printf("Publish result error: %v", err)
 	}
 
 	logger.Log.Info("Publish result to Redis succeeded",
-		zap.String("task", task.TaskUuid),
+		zap.String("task_uuid", task.TaskUuid),
 		zap.Int("retry_count", retryCount))
 
 	msg.Ack(false)
@@ -231,13 +232,13 @@ func (w *EvalWorker) handleFailure(channel *amqp.Channel, msg amqp.Delivery, tas
 }
 
 // push任务的执行结果给前端
-func (w *EvalWorker) publishResult(taskUuid string, status string, msg string) error {
+func (w *EvalWorker) publishResult(ctx context.Context, taskUuid string, status string, msg string) error {
 	result := models.TaskResult{
 		TaskUuid: taskUuid,
 		Status:   status,
 		Message:  msg,
 	}
 	body, _ := json.Marshal(result)
-	channel := "eval_task_results" // 前端订阅频道
-	return w.Service.RedisClient.Publish(context.Background(), channel, body).Err()
+	channel := EvalTaskRedisChannel // 前端订阅频道
+	return w.Service.RedisClient.Publish(ctx, channel, body).Err()
 }

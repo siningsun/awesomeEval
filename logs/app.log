@@ -39,3 +39,27 @@
 {"level":"info","ts":"2025-10-11T17:09:14.025+0800","caller":"mq/eval_worker.go:168","msg":"Task finished successfully","module":"mq-worker","task_uuid":"b035bd3c-d8dc-47b2-8f46-08b0226597ec"}
 {"level":"info","ts":"2025-10-11T17:09:18.935+0800","caller":"mq/eval_worker.go:168","msg":"Task finished successfully","module":"mq-worker","task_uuid":"77b7343b-3c02-403b-9d64-b7f39afc87e2"}
 {"level":"info","ts":"2025-10-11T17:09:28.179+0800","caller":"mq/eval_worker.go:168","msg":"Task finished successfully","module":"mq-worker","task_uuid":"0eaa6a6c-3b3f-4519-ac3a-0b3a831e2730"}
+{"level":"info","ts":"2025-10-11T18:10:13.411+0800","caller":"api/main.go:44","msg":"server starts successfully","module":"gin-api"}
+{"level":"info","ts":"2025-10-11T18:10:15.096+0800","caller":"mq/dataset_worker.go:64","msg":"DatasetWorker started, waiting for jobs...","module":"mq-worker","queue":"dataset_jobs"}
+{"level":"info","ts":"2025-10-11T18:10:15.096+0800","caller":"mq/eval_worker.go:86","msg":"EvalWorker started, waiting for jobs...","module":"mq-worker","queue":"eval_jobs","worker_pool_size":15}
+{"level":"info","ts":"2025-10-11T18:10:25.571+0800","caller":"zap@v1.1.5/zap.go:125","msg":"/eval/task/create","module":"gin-api","status":401,"method":"POST","path":"/eval/task/create","query":"","ip":"::1","user-agent":"PostmanRuntime/7.45.0","latency":0.000531292,"time":"2025-10-11T10:10:25Z"}
+{"level":"info","ts":"2025-10-11T18:10:39.689+0800","caller":"zap@v1.1.5/zap.go:125","msg":"/loginByPassword","module":"gin-api","status":200,"method":"POST","path":"/loginByPassword","query":"","ip":"::1","user-agent":"PostmanRuntime/7.45.0","latency":0.110106209,"time":"2025-10-11T10:10:39Z"}
+{"level":"info","ts":"2025-10-11T18:10:54.289+0800","caller":"eval/eval.go:48","msg":"CreateBatchEvalJob started","module":"gin-api","userId":2,"datasetId":17}
+{"level":"info","ts":"2025-10-11T18:10:54.300+0800","caller":"eval/eval.go:171","msg":"CreateBatchEvalJob success","module":"gin-api","userId":2}
+{"level":"info","ts":"2025-10-11T18:10:54.302+0800","caller":"zap@v1.1.5/zap.go:125","msg":"/eval/task/create","module":"gin-api","status":200,"method":"POST","path":"/eval/task/create","query":"","ip":"::1","user-agent":"PostmanRuntime/7.45.0","latency":0.014204209,"time":"2025-10-11T10:10:54Z"}
+{"level":"info","ts":"2025-10-11T18:10:54.307+0800","caller":"mq/eval_worker.go:144","msg":"Executing task","module":"mq-worker","task":"0b1f5102-8323-45fd-8cf1-533c7a42286c","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:11:55.416+0800","caller":"mq/eval_worker.go:162","msg":"Updating Task status in DB succeeded","module":"mq-worker","task":"0b1f5102-8323-45fd-8cf1-533c7a42286c","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:11:55.432+0800","caller":"mq/eval_worker.go:172","msg":"Updating Task results in DB succeeded","module":"mq-worker","task":"0b1f5102-8323-45fd-8cf1-533c7a42286c","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:11:55.432+0800","caller":"mq/eval_worker.go:180","msg":"Publish result to Redis succeeded","module":"mq-worker","task":"0b1f5102-8323-45fd-8cf1-533c7a42286c","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:11:55.432+0800","caller":"mq/eval_worker.go:186","msg":"Task finished successfully","module":"mq-worker","task_uuid":"0b1f5102-8323-45fd-8cf1-533c7a42286c","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:24:49.677+0800","caller":"api/main.go:44","msg":"server starts successfully","module":"gin-api"}
+{"level":"info","ts":"2025-10-11T18:24:55.244+0800","caller":"mq/dataset_worker.go:64","msg":"DatasetWorker started, waiting for jobs...","module":"mq-worker","queue":"dataset_jobs"}
+{"level":"info","ts":"2025-10-11T18:24:55.245+0800","caller":"mq/eval_worker.go:87","msg":"EvalWorker started, waiting for jobs...","module":"mq-worker","queue":"eval_jobs","worker_pool_size":15}
+{"level":"info","ts":"2025-10-11T18:24:58.955+0800","caller":"eval/eval.go:48","msg":"CreateBatchEvalJob started","module":"gin-api","userId":2,"datasetId":17}
+{"level":"info","ts":"2025-10-11T18:24:58.970+0800","caller":"eval/eval.go:171","msg":"CreateBatchEvalJob success","module":"gin-api","userId":2}
+{"level":"info","ts":"2025-10-11T18:24:58.971+0800","caller":"zap@v1.1.5/zap.go:125","msg":"/eval/task/create","module":"gin-api","status":200,"method":"POST","path":"/eval/task/create","query":"","ip":"::1","user-agent":"PostmanRuntime/7.45.0","latency":0.017387292,"time":"2025-10-11T10:24:58Z"}
+{"level":"info","ts":"2025-10-11T18:24:58.977+0800","caller":"mq/eval_worker.go:145","msg":"Executing task","module":"mq-worker","task":"cd7aff9c-2ba3-4f88-bc1b-989b34d46e04","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:25:53.723+0800","caller":"mq/eval_worker.go:163","msg":"Updating Task status in DB succeeded","module":"mq-worker","task":"cd7aff9c-2ba3-4f88-bc1b-989b34d46e04","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:25:53.732+0800","caller":"mq/eval_worker.go:173","msg":"Updating Task results in DB succeeded","module":"mq-worker","task":"cd7aff9c-2ba3-4f88-bc1b-989b34d46e04","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:25:53.733+0800","caller":"mq/eval_worker.go:181","msg":"Publish result to Redis succeeded","module":"mq-worker","task":"cd7aff9c-2ba3-4f88-bc1b-989b34d46e04","retry_count":0}
+{"level":"info","ts":"2025-10-11T18:25:53.733+0800","caller":"mq/eval_worker.go:187","msg":"Task finished successfully","module":"mq-worker","task_uuid":"cd7aff9c-2ba3-4f88-bc1b-989b34d46e04","retry_count":0}
