@@ -13,6 +13,7 @@ type Config struct {
 	Redis      RedisConfig      `mapstructure:"redis"`
 	RabbitMQ   RabbitMQConfig   `mapstructure:"rabbitmq"`
 	Minio      MinioConfig      `mapstructure:"minio"`
+	Log        LogConfig        `mapstructure:"log"`
 }
 
 type PostgreSQLConfig struct {
@@ -47,6 +48,14 @@ type MinioConfig struct {
 	UseSSL          bool   `mapstructure:"useSSL"`
 }
 
+type LogConfig struct {
+	Level            string   `mapstructure:"level"`
+	Encoding         string   `mapstructure:"encoding"`
+	OutputPaths      []string `mapstructure:"outputPaths"`
+	ErrorOutputPaths []string `mapstructure:"errorOutputPaths"`
+	Development      bool     `mapstructure:"development"`
+}
+
 func LoadConfig() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -73,9 +82,9 @@ func LoadConfig() (*Config, error) {
 	if err := viper.ReadInConfig(); err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if !errors.As(err, &configFileNotFoundError) {
-			return nil, fmt.Errorf("读取配置文件失败: %w", err)
+			return nil, fmt.Errorf("error: %w", err)
 		}
-		log.Println("配置文件未找到，使用默认配置和环境变量")
+		log.Println("cannot find config file, using default values")
 	}
 
 	var config Config

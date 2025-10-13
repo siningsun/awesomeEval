@@ -25,3 +25,12 @@ minio:
   secretAccessKey: minioadmin
   useSSL: false
   bucketName: my-bucket
+
+log:
+  encoding: json
+  outputPaths:
+    - stdout
+    - ./logs/app.log
+  errorOutputPaths:
+    - stderr
+  development: true

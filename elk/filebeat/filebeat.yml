@@ -1,0 +1,8 @@
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - /var/log/gin-app/app.log
+
+output.logstash:
+  hosts: ["logstash:5044"]
