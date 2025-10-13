@@ -1,6 +1,7 @@
 package mq
 
 import (
+	"awesomeEval/internal/logger"
 	"awesomeEval/internal/models"
 	"awesomeEval/internal/service/dataset"
 	"context"
@@ -8,28 +9,27 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"github.com/streadway/amqp"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"log"
 )
 
+const (
+	DatasetQueueName = "dataset_jobs"
+)
+
 type DatasetWorker struct {
-	DB          *gorm.DB
-	MinioClient *minio.Client
-	Conn        *amqp.Connection
-	Service     *dataset.Service
+	Service *dataset.Service
 }
 
 func NewDatasetWorker(conn *amqp.Connection, db *gorm.DB, minioClient *minio.Client, redisClient *redis.Client) *DatasetWorker {
 	return &DatasetWorker{
-		DB:          db,
-		MinioClient: minioClient,
-		Conn:        conn,
-		Service:     dataset.NewService(conn, db, minioClient, redisClient),
+		Service: dataset.NewService(conn, db, minioClient, redisClient),
 	}
 }
 
 func (w *DatasetWorker) Start(ctx context.Context) error {
-	channel, err := w.Conn.Channel()
+	channel, err := w.Service.Conn.Channel()
 	if err != nil {
 		return err
 	}
@@ -49,19 +49,20 @@ func (w *DatasetWorker) Start(ctx context.Context) error {
 	}
 
 	msgs, err := channel.Consume(
-		"dataset_jobs", // 队列名称
-		"",             // consumer tag
-		false,          // auto-ack
-		false,          // exclusive
-		false,          // no-local
-		false,          // no-wait
+		DatasetQueueName, // 队列名称
+		"",               // consumer tag
+		false,            // auto-ack
+		false,            // exclusive
+		false,            // no-local
+		false,            // no-wait
 		nil,
 	)
 	if err != nil {
 		return err
 	}
 
-	log.Println("DatasetWorker started, waiting for jobs...")
+	logger.Log.Info("DatasetWorker started, waiting for jobs...",
+		zap.String("queue", DatasetQueueName))
 
 	for msg := range msgs {
 		go func(m amqp.Delivery) {
@@ -85,7 +86,7 @@ func (w *DatasetWorker) handleMessage(ctx context.Context, msg amqp.Delivery) er
 	}
 	// 从数据库中加载完整 Job（包括最新状态）
 	var job models.DatasetIOJob
-	if err := w.DB.First(&job, jobMsg.ID).Error; err != nil {
+	if err := w.Service.DB.First(&job, jobMsg.ID).Error; err != nil {
 		log.Printf("⚠️ DB fetch job error: %v", err)
 		return err
 	}
